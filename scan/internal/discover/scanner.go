@@ -179,8 +179,12 @@ func buildMonorepoChild(parent Project, childPath string, cfg *config.Config) sp
 func makeProjectID(projectPath string, scanRoots []string) string {
 	for _, root := range scanRoots {
 		root = expandHome(root)
+		resolved, err := filepath.EvalSymlinks(root)
+		if err != nil {
+			resolved = root
+		}
 
-		parentOfRoot := filepath.Dir(root)
+		parentOfRoot := filepath.Dir(resolved)
 		rel, err := filepath.Rel(parentOfRoot, projectPath)
 		if err != nil {
 			continue
