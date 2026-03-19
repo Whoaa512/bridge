@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -69,9 +70,15 @@ func WithWebDir(dir string) Option {
 	return func(s *Server) { s.webDir = dir }
 }
 
+func isLocalOrigin(origin string) bool {
+	return strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1")
+}
+
 func cors(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		if origin := r.Header.Get("Origin"); isLocalOrigin(origin) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
 		next(w, r)
 	}
 }

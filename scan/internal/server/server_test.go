@@ -161,13 +161,48 @@ func TestCORSHeader(t *testing.T) {
 	srv := New(0)
 	srv.SetSpec(testSpec())
 
-	req := httptest.NewRequest("GET", "/api/health", nil)
-	w := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(w, req)
+	t.Run("reflects localhost origin", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/health", nil)
+		req.Header.Set("Origin", "http://localhost:7401")
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
 
-	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "*" {
-		t.Errorf("CORS header = %q, want *", got)
-	}
+		if got := w.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:7401" {
+			t.Errorf("CORS header = %q, want http://localhost:7401", got)
+		}
+	})
+
+	t.Run("reflects 127.0.0.1 origin", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/health", nil)
+		req.Header.Set("Origin", "http://127.0.0.1:7400")
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if got := w.Header().Get("Access-Control-Allow-Origin"); got != "http://127.0.0.1:7400" {
+			t.Errorf("CORS header = %q, want http://127.0.0.1:7400", got)
+		}
+	})
+
+	t.Run("blocks non-local origin", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/health", nil)
+		req.Header.Set("Origin", "https://evil.com")
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if got := w.Header().Get("Access-Control-Allow-Origin"); got != "" {
+			t.Errorf("CORS header = %q, want empty for non-local origin", got)
+		}
+	})
+
+	t.Run("no origin header", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/health", nil)
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if got := w.Header().Get("Access-Control-Allow-Origin"); got != "" {
+			t.Errorf("CORS header = %q, want empty when no origin", got)
+		}
+	})
 }
 
 func TestSPAHandler(t *testing.T) {
