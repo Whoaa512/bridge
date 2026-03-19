@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cjwinslow/bridge/scan/internal/spec"
+	"github.com/gorilla/websocket"
 )
 
 func testSpec() *spec.BridgeSpec {
@@ -234,5 +235,101 @@ func TestNoWebDir(t *testing.T) {
 
 	if w.Code == 200 {
 		t.Error("expected non-200 for / without webDir")
+	}
+}
+
+func wsConnect(t *testing.T, srv *Server) *websocket.Conn {
+	t.Helper()
+	ts := httptest.NewServer(srv.Handler())
+	t.Cleanup(ts.Close)
+
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws"
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("ws dial: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	return conn
+}
+
+func TestWSFullSyncOnConnect(t *testing.T) {
+	srv := New(0)
+	sp := testSpec()
+	srv.SetSpec(sp)
+
+	conn := wsConnect(t, srv)
+
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, msg, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+
+	var envelope struct {
+		Type string          `json:"type"`
+		Spec json.RawMessage `json:"spec"`
+	}
+	if err := json.Unmarshal(msg, &envelope); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if envelope.Type != "full_sync" {
+		t.Errorf("type = %q, want full_sync", envelope.Type)
+	}
+
+	var parsed spec.BridgeSpec
+	if err := json.Unmarshal(envelope.Spec, &parsed); err != nil {
+		t.Fatalf("unmarshal spec: %v", err)
+	}
+	if len(parsed.Projects) != 1 {
+		t.Errorf("projects = %d, want 1", len(parsed.Projects))
+	}
+}
+
+func TestWSBroadcastOnSetSpec(t *testing.T) {
+	srv := New(0)
+	srv.SetSpec(testSpec())
+
+	conn := wsConnect(t, srv)
+
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	conn.ReadMessage()
+
+	newSpec := testSpec()
+	newSpec.Projects = append(newSpec.Projects, spec.Project{
+		ID:                   "project:code/ws-test",
+		Path:                 "/code/ws-test",
+		Name:                 "ws-test",
+		Kind:                 "git_repo",
+		Classification:       "personal",
+		ClassificationSource: "remote",
+		Languages:            []string{},
+		Flags:                []string{},
+		Errors:               []spec.ScanErr{},
+		PRs:                  []spec.PR{},
+		Tasks:                []spec.Task{},
+		Subprojects:          []string{},
+	})
+	srv.SetSpec(newSpec)
+
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, msg, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("read broadcast: %v", err)
+	}
+
+	var envelope struct {
+		Type string          `json:"type"`
+		Spec json.RawMessage `json:"spec"`
+	}
+	json.Unmarshal(msg, &envelope)
+
+	if envelope.Type != "full_sync" {
+		t.Errorf("type = %q, want full_sync", envelope.Type)
+	}
+
+	var parsed spec.BridgeSpec
+	json.Unmarshal(envelope.Spec, &parsed)
+	if len(parsed.Projects) != 2 {
+		t.Errorf("projects = %d, want 2", len(parsed.Projects))
 	}
 }

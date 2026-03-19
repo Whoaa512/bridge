@@ -1,4 +1,5 @@
 import { loadSpec } from "./core/loader";
+import { connectWS } from "./core/ws";
 import type { BridgeSpec, Project } from "./core/types";
 import type { Rect, TreemapNode } from "./layout/treemap";
 import { computeLayout, renderColonyMap, buildProjectMap, hasActiveProjects, hitTest } from "./canvas";
@@ -131,6 +132,18 @@ async function main() {
   });
 
   window.addEventListener("resize", () => resizeCanvas(canvas, state));
+
+  connectWS({
+    onSpec: (spec) => {
+      state.spec = spec;
+      state.projectMap = buildProjectMap(spec);
+      state.nodes = computeLayout(spec, state.viewport);
+      state.dirty = true;
+      state.animating = hasActiveProjects(spec);
+    },
+    onDisconnect: () => console.log("[bridge] ws disconnected"),
+    onReconnect: () => console.log("[bridge] ws reconnected"),
+  });
 
   startRenderLoop(state);
 }
