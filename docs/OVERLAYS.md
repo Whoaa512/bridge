@@ -15,7 +15,7 @@ The colony map always shows the same treemap of project tiles. Overlays change w
 | `1` | **Default** | Classification (public/internal/personal) | Alert severity dots | Activity pulse | Overall health |
 | `2` | **Git** | Uncommitted changes (green=clean, yellow=dirty, red=conflicts) | Branch name, ahead/behind count | Pulse on recent commits | Working copy state |
 | `3` | **CI** | Build status (green/red/yellow/gray) | Build number, duration | Red pulse on failures | Build health |
-| `4` | **Infra** | Has running services (lit=yes, dim=no) | Port numbers, process names | Glow intensity = CPU usage | Running infrastructure |
+| `4` | **Infra** | Service health (green=healthy, orange=high load, red=unhealthy) | Port numbers, process names, container status | Glow intensity = CPU usage | Running infrastructure |
 | `5` | **Priority** | Heat map 1-9 (cool blue → hot red) | Priority number | None | What to work on |
 | `6` | **Activity** | Temperature (cold blue=stale → warm orange=active) | Days since last touch | Fade out stale projects | Staleness |
 
@@ -96,7 +96,10 @@ Each overlay has its own palette. Colors chosen for accessibility (distinguishab
 - No CI: `#95A5A6` (gray, dimmed)
 
 ### Infra Overlay
-- Running services: `#E67E22` (warm orange, glow)
+- Running services (healthy): `#2ECC71` (green, glow)
+- Running services (high CPU/mem): `#E67E22` (warm orange, intense glow)
+- Running services (unhealthy/restarting): `#E74C3C` (red)
+- Docker only (no direct process): `#9B59B6` (purple)
 - No services: `#2C3E50` (dark, dimmed)
 
 ### Priority Overlay
@@ -110,6 +113,36 @@ Each overlay has its own palette. Colors chosen for accessibility (distinguishab
 - Active this week: `#F1C40F` (yellow)
 - Stale (>30 days): `#3498DB` (cold blue)
 - Dormant (>90 days): `#2C3E50` (near-black, very dim)
+
+## Accessibility
+
+Color alone is insufficient — overlays use icon badges and shape modifiers as secondary signals:
+
+| Overlay | Color Signal | Non-Color Signal |
+|---|---|---|
+| **Default** | Classification color | Shape: circle (public), square (internal), diamond (personal) |
+| **Git** | Clean/dirty/conflicts | Icon: ✓ (clean), ● (dirty), ✕ (conflicts), ○ (detached) |
+| **CI** | Pass/fail/running/pending | Icon: ✓ (passed), ✕ (failed), ↻ (running), ◷ (pending), — (no CI) |
+| **Infra** | Health color | Icon: ▶ (running services), — (none) + port count badge |
+| **Priority** | Heat map | Number badge (1-9) always visible |
+| **Activity** | Temperature | Days-since badge always visible |
+
+All icon badges are rendered in the tile, visible regardless of color perception. The CI and Git overlays are the most critical since they use red/green — the icon signals are mandatory, not optional.
+
+## Null Data States
+
+When a project lacks data for the active overlay:
+
+| Overlay | Null Condition | Tile Appearance |
+|---|---|---|
+| **Default** | Never null — classification always exists | — |
+| **Git** | `kind != "git_repo"` or `git: null` | Gray, dashed border, "—" icon |
+| **CI** | `ci: null` (no CI configured) | Gray, dimmed, "—" icon |
+| **Infra** | No running services for project | Dark, dimmed, no badge |
+| **Priority** | Priority unset | Gray, "?" badge |
+| **Activity** | `activity: null` or no git history | Gray, "?" badge |
+
+Null tiles are always visible but recede visually. They never disappear — spatial consistency is more important than visual cleanliness.
 
 ## Legend
 
