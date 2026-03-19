@@ -1,0 +1,343 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://bridge.dev/spec/bridge-spec.schema.json",
+  "title": "Bridge Spec",
+  "description": "The contract between the Bridge scanner and web UI.",
+  "type": "object",
+  "required": ["version", "scannedAt", "machine", "projects", "infrastructure", "alerts", "cycle"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semver. Major bumps = breaking schema changes."
+    },
+    "scannedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "machine": {
+      "$ref": "#/definitions/Machine"
+    },
+    "projects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Project"
+      }
+    },
+    "infrastructure": {
+      "$ref": "#/definitions/Infrastructure"
+    },
+    "alerts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Alert"
+      }
+    },
+    "cycle": {
+      "$ref": "#/definitions/Cycle"
+    }
+  },
+  "definitions": {
+    "Machine": {
+      "type": "object",
+      "required": ["hostname", "os", "uptime"],
+      "properties": {
+        "hostname": { "type": "string" },
+        "os": { "type": "string", "enum": ["darwin", "linux"] },
+        "uptime": { "type": "integer", "description": "Seconds" }
+      }
+    },
+    "Project": {
+      "type": "object",
+      "required": ["id", "path", "name", "kind", "classification", "classificationSource", "languages", "flags", "errors"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^project:.+$",
+          "description": "project:<relative-path-from-scan-root>"
+        },
+        "path": { "type": "string" },
+        "name": { "type": "string" },
+        "kind": {
+          "type": "string",
+          "enum": ["git_repo", "directory", "monorepo_child"]
+        },
+        "classification": {
+          "type": "string",
+          "enum": ["public", "internal", "personal"]
+        },
+        "classificationSource": {
+          "type": "string",
+          "enum": ["remote", "infra", "manual"]
+        },
+        "languages": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "git": {
+          "oneOf": [
+            { "$ref": "#/definitions/GitStatus" },
+            { "type": "null" }
+          ]
+        },
+        "ci": {
+          "oneOf": [
+            { "$ref": "#/definitions/CIStatus" },
+            { "type": "null" }
+          ]
+        },
+        "prs": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/PullRequest" }
+        },
+        "tasks": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Task" }
+        },
+        "size": {
+          "oneOf": [
+            { "$ref": "#/definitions/Size" },
+            { "type": "null" }
+          ]
+        },
+        "activity": {
+          "oneOf": [
+            { "$ref": "#/definitions/Activity" },
+            { "type": "null" }
+          ]
+        },
+        "subprojects": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^project:.+$" }
+        },
+        "priority": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1, "maximum": 9 },
+            { "type": "null" }
+          ]
+        },
+        "flags": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "errors": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ScanError" }
+        }
+      }
+    },
+    "GitStatus": {
+      "type": "object",
+      "required": ["branch", "uncommitted", "ahead", "behind", "stashCount", "lastCommit"],
+      "properties": {
+        "branch": { "type": "string" },
+        "uncommitted": { "type": "integer", "minimum": 0 },
+        "ahead": { "type": "integer", "minimum": 0 },
+        "behind": { "type": "integer", "minimum": 0 },
+        "stashCount": { "type": "integer", "minimum": 0 },
+        "lastCommit": { "type": "string", "format": "date-time" },
+        "remoteUrl": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "CIStatus": {
+      "type": "object",
+      "required": ["status", "updatedAt"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["passed", "failed", "running", "pending"]
+        },
+        "url": {
+          "oneOf": [
+            { "type": "string", "format": "uri" },
+            { "type": "null" }
+          ]
+        },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "PullRequest": {
+      "type": "object",
+      "required": ["number", "title", "state", "reviewStatus", "url"],
+      "properties": {
+        "number": { "type": "integer" },
+        "title": { "type": "string" },
+        "state": {
+          "type": "string",
+          "enum": ["open", "closed", "merged"]
+        },
+        "reviewStatus": {
+          "type": "string",
+          "enum": ["approved", "changes_requested", "pending", "none"]
+        },
+        "url": { "type": "string", "format": "uri" }
+      }
+    },
+    "Task": {
+      "type": "object",
+      "required": ["gid", "name", "completed", "url"],
+      "properties": {
+        "gid": { "type": "string" },
+        "name": { "type": "string" },
+        "completed": { "type": "boolean" },
+        "url": { "type": "string", "format": "uri" }
+      }
+    },
+    "Size": {
+      "type": "object",
+      "required": ["loc", "files", "deps"],
+      "properties": {
+        "loc": { "type": "integer", "minimum": 0 },
+        "files": { "type": "integer", "minimum": 0 },
+        "deps": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "Activity": {
+      "type": "object",
+      "required": ["lastTouch", "commitsThisWeek", "staleDays"],
+      "properties": {
+        "lastTouch": { "type": "string", "format": "date-time" },
+        "commitsThisWeek": { "type": "integer", "minimum": 0 },
+        "staleDays": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "ScanError": {
+      "type": "object",
+      "required": ["source", "message", "at"],
+      "properties": {
+        "source": { "type": "string" },
+        "message": { "type": "string" },
+        "at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Infrastructure": {
+      "type": "object",
+      "required": ["ports", "docker", "resources"],
+      "properties": {
+        "ports": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Port" }
+        },
+        "docker": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/DockerContainer" }
+        },
+        "resources": { "$ref": "#/definitions/Resources" }
+      }
+    },
+    "Port": {
+      "type": "object",
+      "required": ["port", "pid", "process", "cwd"],
+      "properties": {
+        "port": { "type": "integer" },
+        "pid": { "type": "integer" },
+        "process": { "type": "string" },
+        "cwd": { "type": "string" },
+        "projectId": {
+          "oneOf": [
+            { "type": "string", "pattern": "^project:.+$" },
+            { "type": "null" }
+          ]
+        },
+        "url": { "type": "string" }
+      }
+    },
+    "DockerContainer": {
+      "type": "object",
+      "required": ["containerId", "image", "name", "status", "ports"],
+      "properties": {
+        "containerId": { "type": "string" },
+        "image": { "type": "string" },
+        "name": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["running", "stopped", "restarting", "paused"]
+        },
+        "ports": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["host", "container"],
+            "properties": {
+              "host": { "type": "integer" },
+              "container": { "type": "integer" }
+            }
+          }
+        },
+        "projectId": {
+          "oneOf": [
+            { "type": "string", "pattern": "^project:.+$" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "Resources": {
+      "type": "object",
+      "required": ["cpuByProject", "memByProject"],
+      "properties": {
+        "cpuByProject": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        },
+        "memByProject": {
+          "type": "object",
+          "additionalProperties": { "type": "integer" }
+        }
+      }
+    },
+    "Alert": {
+      "type": "object",
+      "required": ["severity", "projectId", "type", "message"],
+      "properties": {
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "warning", "info"]
+        },
+        "projectId": {
+          "oneOf": [
+            { "type": "string", "pattern": "^project:.+$" },
+            { "type": "null" }
+          ]
+        },
+        "type": { "type": "string" },
+        "message": { "type": "string" },
+        "url": {
+          "oneOf": [
+            { "type": "string", "format": "uri" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "Cycle": {
+      "type": "object",
+      "required": ["period", "start", "end", "summary"],
+      "properties": {
+        "period": {
+          "type": "string",
+          "enum": ["daily", "weekly"]
+        },
+        "start": { "type": "string", "format": "date-time" },
+        "end": { "type": "string", "format": "date-time" },
+        "summary": {
+          "type": "object",
+          "required": ["commitsTotal", "projectsActive", "prsOpened", "prsMerged", "alertsNew", "alertsResolved"],
+          "properties": {
+            "commitsTotal": { "type": "integer", "minimum": 0 },
+            "projectsActive": { "type": "integer", "minimum": 0 },
+            "prsOpened": { "type": "integer", "minimum": 0 },
+            "prsMerged": { "type": "integer", "minimum": 0 },
+            "alertsNew": { "type": "integer", "minimum": 0 },
+            "alertsResolved": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    }
+  }
+}
