@@ -1,5 +1,5 @@
 import { test, expect, describe, beforeEach, mock } from "bun:test";
-import { loadSpec, loadProjects } from "./loader";
+import { loadSpec } from "./loader";
 
 const mockSpec = {
   version: "1",
@@ -33,26 +33,16 @@ describe("loadSpec", () => {
 
   test("throws on fetch error (non-200)", async () => {
     mockFetch.mockResolvedValue(new Response("Not Found", { status: 404, statusText: "Not Found" }));
-    expect(loadSpec()).rejects.toThrow("Failed to fetch /api/spec: 404 Not Found");
+    expect(loadSpec()).rejects.toThrow("Failed to fetch spec: 404 Not Found");
   });
 
   test("throws on network error", async () => {
     mockFetch.mockRejectedValue(new Error("Network failure"));
     expect(loadSpec()).rejects.toThrow("Network failure");
   });
-});
 
-describe("loadProjects", () => {
-  beforeEach(() => {
-    mockFetch.mockReset();
-    globalThis.fetch = mockFetch as unknown as typeof fetch;
-  });
-
-  test("returns project array", async () => {
-    const projects = [{ id: "p1", name: "test-project" }];
-    mockFetch.mockResolvedValue(new Response(JSON.stringify(projects), { status: 200 }));
-    const result = await loadProjects();
-    expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("p1");
+  test("throws on empty/null response", async () => {
+    mockFetch.mockResolvedValue(new Response("null", { status: 200 }));
+    expect(loadSpec()).rejects.toThrow("Empty response from scanner");
   });
 });

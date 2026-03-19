@@ -140,7 +140,7 @@ export function computeLayout(spec: BridgeSpec, viewport: Rect): TreemapNode[] {
 
 export function renderColonyMap(
   ctx: CanvasRenderingContext2D,
-  spec: BridgeSpec,
+  projectMap: Map<string, Project>,
   nodes: TreemapNode[],
   viewport: Rect,
   hoveredId: string | null,
@@ -150,11 +150,17 @@ export function renderColonyMap(
   ctx.fillStyle = COLORS.background;
   ctx.fillRect(viewport.x, viewport.y, viewport.w, viewport.h);
 
-  const projectMap = new Map(spec.projects.map((p) => [p.id, p]));
-
   for (const node of nodes) {
     const project = projectMap.get(node.id);
     if (!project) continue;
     renderTile(ctx, node, project, node.id === hoveredId, time);
   }
+}
+
+export function buildProjectMap(spec: BridgeSpec): Map<string, Project> {
+  return new Map(spec.projects.map((p) => [p.id, p]));
+}
+
+export function hasActiveProjects(spec: BridgeSpec): boolean {
+  return spec.projects.some((p) => (p.activity?.staleDays ?? 999) < 7);
 }

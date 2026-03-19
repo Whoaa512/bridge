@@ -1,3 +1,3 @@
 export { COLORS, classificationColor, activityGlow } from "./colors";
-export { renderColonyMap, computeLayout } from "./render";
+export { renderColonyMap, computeLayout, buildProjectMap, hasActiveProjects } from "./render";
 export { hitTest } from "./hit";

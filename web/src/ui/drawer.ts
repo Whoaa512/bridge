@@ -207,13 +207,13 @@ export function showDrawer(project: Project) {
     drawer = document.createElement("div");
     drawer.id = DRAWER_ID;
     getRoot().appendChild(drawer);
-    requestAnimationFrame(() => drawer!.classList.add("open"));
   } else {
+    drawer.classList.remove("open");
     drawer.innerHTML = "";
-    drawer.classList.add("open");
   }
 
   drawer.appendChild(buildDrawerContent(project));
+  requestAnimationFrame(() => drawer!.classList.add("open"));
 }
 
 export function hideDrawer() {

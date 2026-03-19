@@ -117,10 +117,14 @@ func (s *Server) handleSpec(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
-	projects := s.current.Projects
+	sp := s.current
 	s.mu.RUnlock()
 
-	writeJSON(w, projects)
+	if sp == nil {
+		writeJSON(w, []any{})
+		return
+	}
+	writeJSON(w, sp.Projects)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

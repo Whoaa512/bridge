@@ -1,15 +1,18 @@
 import { loadSpec } from "./core/loader";
 import type { BridgeSpec, Project } from "./core/types";
 import type { Rect, TreemapNode } from "./layout/treemap";
-import { computeLayout, renderColonyMap, hitTest } from "./canvas";
-import { showDrawer, hideDrawer, showLoading, hideLoading, showEmpty, hideEmpty } from "./ui";
+import { computeLayout, renderColonyMap, buildProjectMap, hasActiveProjects, hitTest } from "./canvas";
+import { showDrawer, hideDrawer, showLoading, hideLoading, showEmpty } from "./ui";
 
 interface State {
   ctx: CanvasRenderingContext2D;
   spec: BridgeSpec;
+  projectMap: Map<string, Project>;
   nodes: TreemapNode[];
   viewport: Rect;
   hoveredId: string | null;
+  dirty: boolean;
+  animating: boolean;
   dpr: number;
 }
 
@@ -42,11 +45,15 @@ function resizeCanvas(canvas: HTMLCanvasElement, state: State) {
   state.dpr = dpr;
   state.viewport = getViewport();
   state.nodes = computeLayout(state.spec, state.viewport);
+  state.dirty = true;
 }
 
 function startRenderLoop(state: State) {
   function frame(time: number) {
-    renderColonyMap(state.ctx, state.spec, state.nodes, state.viewport, state.hoveredId, time);
+    if (state.dirty || state.animating) {
+      renderColonyMap(state.ctx, state.projectMap, state.nodes, state.viewport, state.hoveredId, time);
+      state.dirty = false;
+    }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
@@ -56,6 +63,15 @@ function findProject(spec: BridgeSpec, id: string): Project | undefined {
   return spec.projects.find((p) => p.id === id);
 }
 
+function showError(message: string) {
+  const root = document.getElementById("ui-root");
+  if (!root) return;
+  const div = document.createElement("div");
+  div.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#f85149;font-size:16px;font-family:system-ui;text-align:center;max-width:400px;";
+  div.textContent = message;
+  root.appendChild(div);
+}
+
 async function main() {
   const canvas = document.getElementById("colony") as HTMLCanvasElement;
   if (!canvas) throw new Error("Canvas element not found");
@@ -63,25 +79,38 @@ async function main() {
   const { ctx, dpr } = setupCanvas(canvas);
 
   showLoading();
-  const spec = await loadSpec();
+
+  let spec: BridgeSpec;
+  try {
+    spec = await loadSpec();
+  } catch (err) {
+    hideLoading();
+    showError(`Failed to connect to Bridge scanner. Is \`bridge serve\` running?\n\n${err}`);
+    return;
+  }
   hideLoading();
 
   if (spec.projects.length === 0) {
     showEmpty();
     return;
   }
-  hideEmpty();
 
   const viewport = getViewport();
   const nodes = computeLayout(spec, viewport);
-  const state: State = { ctx, spec, nodes, viewport, hoveredId: null, dpr };
+  const projectMap = buildProjectMap(spec);
+  const animating = hasActiveProjects(spec);
+
+  const state: State = { ctx, spec, projectMap, nodes, viewport, hoveredId: null, dirty: true, animating, dpr };
 
   canvas.addEventListener("mousemove", (e) => {
+    const prev = state.hoveredId;
     state.hoveredId = hitTest(state.nodes, e.clientX, e.clientY);
+    if (state.hoveredId !== prev) state.dirty = true;
     canvas.style.cursor = state.hoveredId ? "pointer" : "default";
   });
 
   canvas.addEventListener("mouseleave", () => {
+    if (state.hoveredId !== null) state.dirty = true;
     state.hoveredId = null;
     canvas.style.cursor = "default";
   });
@@ -106,4 +135,7 @@ async function main() {
   startRenderLoop(state);
 }
 
-main();
+main().catch((err) => {
+  hideLoading();
+  console.error("Bridge init failed:", err);
+});
