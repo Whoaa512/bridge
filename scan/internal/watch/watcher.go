@@ -102,6 +102,7 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 	defer w.mu.Unlock()
 
 	if w.suppressed() {
+		log.Printf("[watch] suppressed event: %s %s", event.Op, event.Name)
 		return
 	}
 
@@ -114,6 +115,7 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 		}
 	}
 
+	log.Printf("[watch] %s %s → project %s", event.Op, filepath.Base(event.Name), filepath.Base(projectPath))
 	w.pending[projectPath] = time.Now()
 }
 
@@ -125,8 +127,12 @@ func (w *Watcher) flushPending() {
 	w.mu.Lock()
 
 	if w.suppressed() {
+		n := len(w.pending)
 		for p := range w.pending {
 			delete(w.pending, p)
+		}
+		if n > 0 {
+			log.Printf("[watch] dropped %d pending events (suppressed)", n)
 		}
 		w.mu.Unlock()
 		return
@@ -145,6 +151,10 @@ func (w *Watcher) flushPending() {
 
 	if len(ready) > 0 {
 		w.scanning = true
+		log.Printf("[watch] flushing %d dirty projects, triggering rescan", len(ready))
+		for _, p := range ready {
+			log.Printf("[watch]   dirty: %s", filepath.Base(p))
+		}
 	}
 	w.mu.Unlock()
 
