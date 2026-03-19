@@ -1,4 +1,4 @@
-import type { BridgeSpec, Project } from "../core/types";
+import type { Project } from "../core/types";
 import type { Rect, TreemapNode } from "../layout/treemap";
 import { treemap } from "../layout/treemap";
 import { computeWeight } from "../layout/weight";
@@ -121,7 +121,7 @@ function renderTile(
   ctx.restore();
 }
 
-export function computeLayout(spec: BridgeSpec, viewport: Rect): TreemapNode[] {
+export function computeLayout(projects: Project[], viewport: Rect): TreemapNode[] {
   const margin = 20;
   const bounds: Rect = {
     x: viewport.x + margin,
@@ -130,7 +130,7 @@ export function computeLayout(spec: BridgeSpec, viewport: Rect): TreemapNode[] {
     h: Math.max(0, viewport.h - margin * 2),
   };
 
-  const items = spec.projects.map((p) => ({
+  const items = projects.map((p) => ({
     id: p.id,
     weight: computeWeight(p),
   }));
@@ -157,10 +157,10 @@ export function renderColonyMap(
   }
 }
 
-export function buildProjectMap(spec: BridgeSpec): Map<string, Project> {
-  return new Map(spec.projects.map((p) => [p.id, p]));
+export function buildProjectMap(projects: Project[]): Map<string, Project> {
+  return new Map(projects.map((p) => [p.id, p]));
 }
 
-export function hasActiveProjects(spec: BridgeSpec): boolean {
-  return spec.projects.some((p) => (p.activity?.staleDays ?? 999) < 7);
+export function hasActiveProjects(projects: Project[]): boolean {
+  return projects.some((p) => (p.activity?.staleDays ?? 999) < 7);
 }

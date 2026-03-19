@@ -1,5 +1,6 @@
 import { loadSpec } from "./core/loader";
 import { connectWS } from "./core/ws";
+import { filterProjects, DEFAULT_FILTER } from "./core/filter";
 import type { BridgeSpec, Project } from "./core/types";
 import type { Rect, TreemapNode } from "./layout/treemap";
 import { computeLayout, renderColonyMap, buildProjectMap, hasActiveProjects, hitTest } from "./canvas";
@@ -8,6 +9,7 @@ import { showDrawer, hideDrawer, showLoading, hideLoading, showEmpty } from "./u
 interface State {
   ctx: CanvasRenderingContext2D;
   spec: BridgeSpec;
+  visibleProjects: Project[];
   projectMap: Map<string, Project>;
   nodes: TreemapNode[];
   viewport: Rect;
@@ -45,7 +47,7 @@ function resizeCanvas(canvas: HTMLCanvasElement, state: State) {
   state.ctx.scale(dpr, dpr);
   state.dpr = dpr;
   state.viewport = getViewport();
-  state.nodes = computeLayout(state.spec, state.viewport);
+  state.nodes = computeLayout(state.visibleProjects, state.viewport);
   state.dirty = true;
 }
 
@@ -97,11 +99,12 @@ async function main() {
   }
 
   const viewport = getViewport();
-  const nodes = computeLayout(spec, viewport);
-  const projectMap = buildProjectMap(spec);
-  const animating = hasActiveProjects(spec);
+  const visibleProjects = filterProjects(spec.projects, DEFAULT_FILTER);
+  const nodes = computeLayout(visibleProjects, viewport);
+  const projectMap = buildProjectMap(visibleProjects);
+  const animating = hasActiveProjects(visibleProjects);
 
-  const state: State = { ctx, spec, projectMap, nodes, viewport, hoveredId: null, dirty: true, animating, dpr };
+  const state: State = { ctx, spec, visibleProjects, projectMap, nodes, viewport, hoveredId: null, dirty: true, animating, dpr };
 
   canvas.addEventListener("mousemove", (e) => {
     const prev = state.hoveredId;
@@ -136,10 +139,11 @@ async function main() {
   connectWS({
     onSpec: (spec) => {
       state.spec = spec;
-      state.projectMap = buildProjectMap(spec);
-      state.nodes = computeLayout(spec, state.viewport);
+      state.visibleProjects = filterProjects(spec.projects, DEFAULT_FILTER);
+      state.projectMap = buildProjectMap(state.visibleProjects);
+      state.nodes = computeLayout(state.visibleProjects, state.viewport);
       state.dirty = true;
-      state.animating = hasActiveProjects(spec);
+      state.animating = hasActiveProjects(state.visibleProjects);
     },
     onDisconnect: () => console.log("[bridge] ws disconnected"),
     onReconnect: () => console.log("[bridge] ws reconnected"),
