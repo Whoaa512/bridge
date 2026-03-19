@@ -86,6 +86,11 @@ function injectStyle() {
 #${DRAWER_ID} .row .label { color: #8b949e; }
 #${DRAWER_ID} .row .value { color: #c9d1d9; }
 #${DRAWER_ID} .row .value.warn { color: #d29922; }
+#${DRAWER_ID} .row .value a {
+  color: #58a6ff;
+  text-decoration: none;
+}
+#${DRAWER_ID} .row .value a:hover { text-decoration: underline; }
 #${DRAWER_ID} .error-item {
   font-size: 13px;
   padding: 6px 8px;
@@ -125,6 +130,21 @@ function row(label: string, value: string, warn = false): HTMLElement {
   return r;
 }
 
+function linkRow(label: string, url: string, maxLen = 30): HTMLElement {
+  const r = el("div", "row");
+  r.appendChild(el("span", "label", label));
+  const v = el("span", "value");
+  const a = document.createElement("a");
+  a.href = url;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  a.textContent = url.length > maxLen ? url.slice(0, maxLen) + "…" : url;
+  a.title = url;
+  v.appendChild(a);
+  r.appendChild(v);
+  return r;
+}
+
 function section(title: string, ...children: HTMLElement[]): HTMLElement {
   const s = el("div", "section");
   s.appendChild(el("div", "section-title", title));
@@ -159,6 +179,9 @@ function buildDrawerContent(project: Project): DocumentFragment {
     }
     if (g.lastCommit) {
       rows.push(row("Last commit", relativeTime(g.lastCommit)));
+    }
+    if (g.remoteUrl) {
+      rows.push(linkRow("Remote", g.remoteUrl));
     }
     frag.appendChild(section("Git", ...rows));
   }
