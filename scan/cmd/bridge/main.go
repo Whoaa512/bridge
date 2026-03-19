@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -50,6 +51,7 @@ Usage:
   bridge scan --json  Run scan, print spec to stdout
   bridge serve        Start daemon (scanner + HTTP on :7400)
   bridge serve --port 8080  Custom port
+  bridge serve --web-dir ./web/dist  Serve web UI from directory
   bridge rpc scan     Trigger scan, return spec as JSON
   bridge rpc projects List all projects as JSON
 
@@ -130,9 +132,33 @@ func parsePort() int {
 	return 7400
 }
 
+func parseWebDir() string {
+	for i, arg := range os.Args {
+		if arg == "--web-dir" && i+1 < len(os.Args) {
+			return os.Args[i+1]
+		}
+		if strings.HasPrefix(arg, "--web-dir=") {
+			return strings.TrimPrefix(arg, "--web-dir=")
+		}
+	}
+
+	candidates := []string{"web/dist"}
+	if exe, err := os.Executable(); err == nil {
+		candidates = append(candidates, filepath.Join(filepath.Dir(exe), "web", "dist"))
+	}
+
+	for _, c := range candidates {
+		if info, err := os.Stat(c); err == nil && info.IsDir() {
+			return c
+		}
+	}
+	return ""
+}
+
 func runServe() {
 	cfg := loadOrOnboard()
 	port := parsePort()
+	webDir := parseWebDir()
 
 	lock, err := spec.AcquireLock()
 	if err != nil {
@@ -150,7 +176,15 @@ func runServe() {
 		os.Exit(1)
 	}
 
-	srv := server.New(port)
+	var opts []server.Option
+	if webDir != "" {
+		fmt.Fprintf(os.Stderr, "Serving web UI from %s\n", webDir)
+		opts = append(opts, server.WithWebDir(webDir))
+	} else {
+		fmt.Fprintf(os.Stderr, "No web/dist found, serving API only\n")
+	}
+
+	srv := server.New(port, opts...)
 	srv.SetSpec(s)
 
 	cache := watch.NewCache()

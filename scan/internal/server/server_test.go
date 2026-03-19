@@ -3,6 +3,9 @@ package server
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -150,5 +153,86 @@ func TestUpdateSpec(t *testing.T) {
 
 	if len(projects) != 2 {
 		t.Errorf("projects = %d, want 2 after update", len(projects))
+	}
+}
+
+func TestCORSHeader(t *testing.T) {
+	srv := New(0)
+	srv.SetSpec(testSpec())
+
+	req := httptest.NewRequest("GET", "/api/health", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Errorf("CORS header = %q, want *", got)
+	}
+}
+
+func TestSPAHandler(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>app</html>"), 0644)
+	os.MkdirAll(filepath.Join(dir, "assets"), 0755)
+	os.WriteFile(filepath.Join(dir, "assets", "main.js"), []byte("console.log('hi')"), 0644)
+
+	srv := New(0, WithWebDir(dir))
+	srv.SetSpec(testSpec())
+
+	t.Run("serves index at root", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/", nil)
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("status = %d, want 200", w.Code)
+		}
+		if body := w.Body.String(); body != "<html>app</html>" {
+			t.Errorf("body = %q", body)
+		}
+	})
+
+	t.Run("serves static asset", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/assets/main.js", nil)
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("status = %d, want 200", w.Code)
+		}
+		if body := w.Body.String(); body != "console.log('hi')" {
+			t.Errorf("body = %q", body)
+		}
+	})
+
+	t.Run("falls back to index for SPA routes", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/dashboard/something", nil)
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("status = %d, want 200", w.Code)
+		}
+		if body := w.Body.String(); !strings.Contains(body, "<html>app</html>") {
+			t.Errorf("expected index.html fallback, got %q", body)
+		}
+	})
+
+	t.Run("API still works with webDir", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/health", nil)
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("status = %d, want 200", w.Code)
+		}
+	})
+}
+
+func TestNoWebDir(t *testing.T) {
+	srv := New(0)
+	srv.SetSpec(testSpec())
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code == 200 {
+		t.Error("expected non-200 for / without webDir")
 	}
 }
