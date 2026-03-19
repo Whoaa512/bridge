@@ -1,8 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
+
+	"github.com/cjwinslow/bridge/scan/internal/config"
+	"github.com/cjwinslow/bridge/scan/internal/discover"
+	"github.com/cjwinslow/bridge/scan/internal/spec"
 )
 
 func main() {
@@ -41,9 +47,54 @@ Options:
 `)
 }
 
+func loadOrOnboard() *config.Config {
+	if config.Exists() {
+		cfg, err := config.Load()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error loading config: %v\n", err)
+			os.Exit(1)
+		}
+		return cfg
+	}
+
+	cfg, err := config.RunOnboarding(os.Stdin, os.Stderr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "onboarding failed: %v\n", err)
+		os.Exit(1)
+	}
+	return cfg
+}
+
+func doScan(cfg *config.Config) *spec.BridgeSpec {
+	lock, err := spec.AcquireLock()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	defer lock.Release()
+
+	return discover.BuildSpec(cfg)
+}
+
 func runScan() {
-	fmt.Fprintln(os.Stderr, "bridge scan: not yet implemented")
-	os.Exit(1)
+	cfg := loadOrOnboard()
+	s := doScan(cfg)
+
+	jsonFlag := slices.Contains(os.Args[2:], "--json")
+
+	if jsonFlag {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(s)
+		return
+	}
+
+	if err := spec.Emit(s); err != nil {
+		fmt.Fprintf(os.Stderr, "error writing spec: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Fprintf(os.Stderr, "Scanned %d projects → %s\n", len(s.Projects), spec.SpecPath())
 }
 
 func runRPC() {
@@ -56,13 +107,34 @@ func runRPC() {
 	sub := os.Args[2]
 	switch sub {
 	case "scan":
-		fmt.Fprintln(os.Stderr, "bridge rpc scan: not yet implemented")
-		os.Exit(1)
+		rpcScan()
 	case "projects":
-		fmt.Fprintln(os.Stderr, "bridge rpc projects: not yet implemented")
-		os.Exit(1)
+		rpcProjects()
 	default:
 		fmt.Fprintf(os.Stderr, "unknown rpc command: %s\n", sub)
 		os.Exit(1)
 	}
+}
+
+func rpcScan() {
+	cfg := loadOrOnboard()
+	s := doScan(cfg)
+
+	if err := spec.Emit(s); err != nil {
+		fmt.Fprintf(os.Stderr, "error writing spec: %v\n", err)
+		os.Exit(1)
+	}
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	enc.Encode(s)
+}
+
+func rpcProjects() {
+	cfg := loadOrOnboard()
+	s := doScan(cfg)
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	enc.Encode(s.Projects)
 }

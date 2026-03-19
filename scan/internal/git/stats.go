@@ -21,7 +21,7 @@ type Stats struct {
 func GetStats(repoPath string) (*Stats, error) {
 	s := &Stats{}
 
-	branch, err := runGit(repoPath, "rev-parse", "--abbrev-ref", "HEAD")
+	branch, err := RunGitCmd(repoPath, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
 		return nil, fmt.Errorf("get branch: %w", err)
 	}
@@ -37,7 +37,7 @@ func GetStats(repoPath string) (*Stats, error) {
 }
 
 func countUncommitted(repoPath string) int {
-	out, err := runGit(repoPath, "status", "--porcelain")
+	out, err := RunGitCmd(repoPath, "status", "--porcelain")
 	if err != nil {
 		return 0
 	}
@@ -49,7 +49,7 @@ func countUncommitted(repoPath string) int {
 }
 
 func getAheadBehind(repoPath string) (int, int) {
-	out, err := runGit(repoPath, "rev-list", "--left-right", "--count", "HEAD...@{upstream}")
+	out, err := RunGitCmd(repoPath, "rev-list", "--left-right", "--count", "HEAD...@{upstream}")
 	if err != nil {
 		return 0, 0
 	}
@@ -65,7 +65,7 @@ func getAheadBehind(repoPath string) (int, int) {
 }
 
 func countStash(repoPath string) int {
-	out, err := runGit(repoPath, "stash", "list")
+	out, err := RunGitCmd(repoPath, "stash", "list")
 	if err != nil {
 		return 0
 	}
@@ -77,7 +77,7 @@ func countStash(repoPath string) int {
 }
 
 func getLastCommit(repoPath string) time.Time {
-	out, err := runGit(repoPath, "log", "-1", "--format=%aI")
+	out, err := RunGitCmd(repoPath, "log", "-1", "--format=%aI")
 	if err != nil {
 		return time.Time{}
 	}
@@ -89,7 +89,7 @@ func getLastCommit(repoPath string) time.Time {
 }
 
 func getRemoteURL(repoPath string) *string {
-	out, err := runGit(repoPath, "remote", "get-url", "origin")
+	out, err := RunGitCmd(repoPath, "remote", "get-url", "origin")
 	if err != nil {
 		return nil
 	}
@@ -100,7 +100,7 @@ func getRemoteURL(repoPath string) *string {
 	return &url
 }
 
-func runGit(repoPath string, args ...string) (string, error) {
+func RunGitCmd(repoPath string, args ...string) (string, error) {
 	cmd := exec.Command("git", append([]string{"-C", repoPath}, args...)...)
 	out, err := cmd.Output()
 	if err != nil {
