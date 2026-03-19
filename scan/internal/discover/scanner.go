@@ -201,6 +201,8 @@ func buildProject(dp Project, cfg *config.Config) spec.Project {
 		p.ClassificationSource = cl.Source
 	}
 
+	p.Size = CollectSize(dp.Path, cfg.Ignore)
+
 	if dp.HasInfra {
 		p.Flags = append(p.Flags, "has_infra")
 	}
@@ -237,6 +239,8 @@ func buildMonorepoChild(parent Project, parentRemoteURL *string, childPath strin
 	cl := Classify(parentRemoteURL, parent.HasInfra, cfg.Classifications[id])
 	p.Classification = cl.Class
 	p.ClassificationSource = cl.Source
+
+	p.Size = CollectSize(childPath, cfg.Ignore)
 
 	if priority, ok := cfg.Priorities[id]; ok {
 		p.Priority = &priority
