@@ -1,2 +1,33 @@
 [tools]
 go = "1.24.3"
+bun = "latest"
+
+[tasks.dev]
+description = "Start scanner + web dev server"
+run = """
+trap 'kill 0' EXIT
+(cd scan && go build ./cmd/bridge/ && ./bridge serve 2>&1 | sed -u 's/^/\x1b[36m[scan]\x1b[0m /') &
+(cd web && bun run dev 2>&1 | sed -u 's/^/\x1b[33m[web]\x1b[0m  /') &
+wait
+"""
+
+[tasks.build]
+description = "Build scanner + web"
+run = """
+cd scan && go build ./cmd/bridge/
+cd web && bun run build
+"""
+
+[tasks.test]
+description = "Run all tests"
+run = """
+cd scan && go test ./...
+cd web && bun test
+"""
+
+[tasks.lint]
+description = "Lint all"
+run = """
+cd scan && go vet ./...
+cd web && bun run tsc --noEmit
+"""
