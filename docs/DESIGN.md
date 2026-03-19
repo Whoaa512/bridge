@@ -92,6 +92,20 @@ If a CLI tool isn't authenticated, that data source returns null with an entry i
 └──────────────────────────────────────────────────────┘
 ```
 
+### WebSocket Delta Format
+
+Messages pushed from scanner to web UI over WebSocket:
+
+```jsonc
+{"type": "project_update", "id": "project:code/fractal", "data": { /* full project object */ }}
+{"type": "alert_new", "alert": { /* full alert object */ }}
+{"type": "alert_resolved", "alertIndex": 0}
+{"type": "infra_change", "data": { /* full infrastructure object */ }}
+{"type": "full_sync", "spec": { /* entire spec — sent on connect and reconnect */ }}
+```
+
+Web client receives `full_sync` on connect, then incrementally applies typed deltas. On reconnect, server re-sends `full_sync`.
+
 ### Component Breakdown
 
 ```
@@ -139,12 +153,9 @@ bridge/
 Full directory walks are expensive. The scanner uses a two-layer caching strategy from M0:
 
 1. **fsnotify watcher** — watches discovered project dirs for `.git/` changes (commits, branch switches, stash). Triggers per-project rescan only.
-2. **TTL cache** — each data source has its own TTL:
-   - Git status: 10s (cheap, local)
-   - Port/process scan: 30s (lsof is fast)
-   - Docker: 60s
-   - CI/PR polling: 5min (external API, rate-limited)
-   - Asana tasks: 10min
+2. **TTL cache** — two tiers:
+   - **Local** (30s): git status, port/process scan, Docker
+   - **Remote** (5min): CI/PR polling, Asana tasks
    - Full directory walk (discovery): 1hr or on-demand
 3. **Dirty flags** — fsnotify events mark individual projects dirty. Next scan cycle only refreshes dirty projects + expired TTLs.
 
@@ -179,6 +190,15 @@ Rules:
 - `~/.bridge/spec.json` written with mode `0600` (contains paths, URLs, port info)
 - `~/.bridge/config.json` written with mode `0600`
 - No credentials stored in bridge config — auth delegated to existing CLI tools
+- `spec.json` written atomically (write to temp file, then `os.Rename`) — prevents readers from seeing partial writes
+
+### Concurrency
+
+- **Single writer**: only one scanner process writes `spec.json` at a time. `bridge scan` acquires a file lock (`~/.bridge/.lock`) before writing. If locked, it exits with an error.
+- **Atomic writes**: spec.json written via temp file + rename (POSIX atomic).
+- **fsnotify dedup**: events within a 100ms window for the same project are coalesced into one rescan.
+- **Read safety**: web UI and CLI read spec.json without locking — atomic writes guarantee they see either the old or new version, never partial.
+- **Overlapping scans**: if a full walk is in progress and an fsnotify event fires, the event is queued and processed after the walk completes.
 
 ## The Bridge Spec
 
@@ -188,8 +208,18 @@ The contract between scanner and web UI. Analogous to fractal's `.fractal/` spec
 ~/.bridge/
 ├── spec.json          # Full scan result
 ├── config.json        # User overrides (classifications, priorities, custom groups)
+├── events.jsonl       # Append-only event log for cycle reports
 └── cache/             # Cached CI/PR/Asana data
 ```
+
+### Cycle Report Collection
+
+- Scanner appends events to `~/.bridge/events.jsonl` (one JSON object per line)
+- Event types: `commit`, `pr_opened`, `pr_merged`, `ci_failed`, `ci_passed`, `alert_fired`, `alert_resolved`
+- Each event has `timestamp`, `projectId`, `type`, and type-specific fields
+- Cycle report summarizes events within the time window
+- Events older than 30 days are pruned on scan startup
+- Metrics only for now — actionable insights deferred to future milestone
 
 ### Spec Schema (draft)
 
@@ -313,8 +343,8 @@ The contract between scanner and web UI. Analogous to fractal's `.fractal/` spec
 
 ### User Config (overlay)
 
-On first run, `bridge scan` triggers an **onboarding flow** — interactive prompt walks user through:
-1. Confirm scan root (default: `~/`)
+On first run, `bridge scan` triggers a **mandatory onboarding flow** — interactive prompt walks user through:
+1. Choose scan roots (no default — user must specify at least one directory)
 2. Review and customize ignore list
 3. Set initial project priorities (optional)
 
@@ -323,14 +353,14 @@ This generates `~/.bridge/config.json`. Subsequent runs use it.
 ```jsonc
 // ~/.bridge/config.json
 {
-  "scanRoots": ["~/"],
+  "specVersion": "0.1.0",    // compatible spec version
+  "scanRoots": ["~/code", "~/work"],  // user-set during onboarding (no default)
   "ignore": [
     "node_modules", ".git", "vendor", "bazel-*",
     "Library", "Applications", ".Trash",
     "Dropbox", "Google Drive", "Downloads",
     "Desktop", "Movies", "Music", "Pictures"
   ],
-  "maxDepth": 3,
   "classifications": {
     "project:code/fractal": "personal",    // override auto-detected
     "project:work/twig": "internal"
@@ -356,20 +386,27 @@ This generates `~/.bridge/config.json`. Subsequent runs use it.
 ## Discovery Algorithm
 
 ```
-1. Walk scanRoots (default: ~/)
+1. Walk scanRoots (set during onboarding, no default)
 2. Skip ignored dirs (node_modules, .git, vendor, Library, etc.)
 3. Resolve symlinks to canonical paths; dedup by real path (never scan a repo twice)
 4. For each directory:
    a. Has .git? → git project
    b. Has _infra/project.yml? → internal airbnb project (may be monorepo child)
-   c. Has package.json with workspaces? → monorepo, recurse children
+   c. Has package.json with workspaces (npm/yarn/pnpm)? → monorepo, recurse children
    d. Has go.work or go.mod with replace directives? → multi-module Go project
-   e. On manual include list? → custom project
-   f. Otherwise → skip (not a project)
+   e. Has Cargo.toml with [workspace]? → Rust workspace
+   f. Has BUILD/WORKSPACE files? → Bazel project
+   g. Has settings.gradle/build.gradle with multi-project? → Gradle multi-project
+   h. Has pnpm-workspace.yaml? → pnpm workspace
+   i. Has lerna.json? → Lerna monorepo
+   j. On manual include list? → custom project
+   k. Otherwise → skip (not a project)
 5. Don't recurse INTO git repos (except for monorepo sub-project detection)
 6. Classify each project (remote URL → public/internal, _infra → internal, config override)
 7. Collect git stats, match running ports, check CI/PRs
 ```
+
+Scanner detects all common workspace patterns. New patterns can be added without schema changes.
 
 ### Project ID Convention
 
@@ -384,10 +421,10 @@ This keeps IDs greppable, agent-friendly, and predictable from the filesystem pa
 ### Port → Project Mapping
 
 Multi-strategy resolution (first match wins):
-1. **CWD match** — lsof PID → `/proc/<pid>/cwd` → match to project path
-2. **Parent process walk** — walk up the process tree checking CWDs (catches subprocesses)
-3. **Config fallback** — `config.json` `services.knownPorts` for static mappings
-4. **Null** — unmatched ports still appear in infra section with `projectId: null`
+1. **CWD match** (M0) — lsof PID → CWD (lsof on macOS, `/proc/<pid>/cwd` on Linux) → match to project path
+2. **Parent process walk** (M2) — walk up the process tree checking CWDs (catches subprocesses)
+3. **Config fallback** (M2) — `config.json` `services.knownPorts` for static mappings
+4. **Null** (always) — unmatched ports still appear in infra section with `projectId: null`
 
 Docker containers have no host CWD — mapping relies entirely on config + image/name heuristics.
 
@@ -422,16 +459,7 @@ Docker containers have no host CWD — mapping relies entirely on config + image
   - Infra overlay: running services, ports, Docker
   - Priority overlay: 1-9 heat map
 
-### Sound Design (committed at M4b, or not at all)
-
-Half-implemented audio is worse than none. At M4b, either ship the full sound pack or drop it.
-
-- Ambient hum that changes with system load
-- Soft chime on build pass
-- Warning tone on build fail
-- Click/select sounds on interaction
-- Achievement sound on PR merge
-- Volume/toggle in settings
+- **Sound design**: deferred — see [AUDIO.md](./AUDIO.md) for the full sound design spec. Ships fully at M4b or not at all.
 
 ### Animations
 
@@ -466,7 +494,7 @@ Bridge can read pi session topics from `~/.pi/agent/session-topics.json` and sho
 Every command supports `--json` for structured output. Agents should always use `--json`.
 
 ```bash
-bridge                  # Open web dashboard (launches browser + scanner if needed)
+bridge                  # Show help and usage
 bridge scan             # Run one-shot scan, emit spec.json
 bridge serve            # Start scanner daemon + web server
 bridge status           # Quick terminal summary (top alerts, active projects)
@@ -475,7 +503,6 @@ bridge config           # Open config in $EDITOR
 bridge priority <project> <1-9>  # Set project priority (writes to config.json)
 bridge ack <alert-id>   # Acknowledge an alert (writes to config.json)
 bridge alerts           # List current alerts
-bridge query <filter>   # Filter projects (e.g. `bridge query ci.status=failed`)
 
 # RPC subcommand — structured programmatic access for agents/scripts
 bridge rpc scan                    # Trigger scan, return spec as JSON
@@ -488,6 +515,13 @@ bridge rpc ack-alert <alert-id>    # Acknowledge alert
 ```
 
 `bridge rpc` always outputs JSON, never human-formatted text. Designed for piping and agent consumption.
+
+```bash
+# Filtering with jq (no built-in query language):
+bridge rpc projects | jq '.[] | select(.ci.status == "failed")'
+bridge rpc projects | jq '.[] | select(.classification == "internal")'
+bridge rpc alerts | jq '.[] | select(.severity == "critical")'
+```
 
 ## MVP Milestones
 
@@ -528,7 +562,6 @@ Testing is inline — each milestone includes its own test expectations.
 - [ ] Web: vitals drawer for selected project
 - [ ] Web: infrastructure overlay (ports, services, containers)
 - [ ] `bridge alerts` and `bridge rpc alerts` commands
-- [ ] `bridge query` with filter support
 - **Tests**: port → project mapping unit tests (all strategies), alert generation from mock spec data, CI/PR polling with rate limit simulation, graceful degradation when APIs unreachable.
 
 ### M3: Priority & Actions
@@ -588,12 +621,15 @@ Testing is inline — each milestone includes its own test expectations.
 2. **launchd integration** → Yes, at M3. `bridge serve --install` creates a launchd plist.
 3. **Fractal migration timing** → M5. Fractal stays standalone until then. Shared rendering extracted when proven needed.
 4. **Sound library** → Web Audio API + CC0 samples. Commit fully at M4b or skip entirely — half-implemented is worse than none.
-5. **Scan roots default** → `~/` with first-run onboarding to customize ignore list.
+5. **Scan roots default** → No default. Onboarding is mandatory on first run — user must specify scan roots.
 6. **Auth** → Reuse existing CLI auth (`gh`, `bk`, `asana`). No dedicated credentials.
 7. **Partial failures** → Per-project `errors` array. Scanner never fails because one project/API is broken.
 8. **Monorepo IDs** → Full relative path: `project:code/mono/packages/foo`.
 9. **Agent API** → `--json` on all commands + `bridge rpc` subcommand. No MCP.
 10. **Write API** → Agents write to config.json via CLI (`bridge priority`, `bridge ack`). Scanner remains sole spec writer. Unidirectional data flow preserved.
+11. **Cycle report storage** → Append-only event log (`events.jsonl`), metrics only, insights deferred.
+12. **TTL granularity** → Two tiers (local 30s, remote 5min) instead of per-source TTLs.
+13. **`bridge query`** → Dropped. Use `bridge rpc` + jq instead.
 
 ## Tech Stack
 
