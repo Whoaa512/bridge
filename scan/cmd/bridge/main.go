@@ -154,15 +154,18 @@ func runServe() {
 	srv.SetSpec(s)
 
 	cache := watch.NewCache()
-	w, err := watch.NewWatcher(cache, func(projectPath string) {
+	var w *watch.Watcher
+	w, err = watch.NewWatcher(cache, func(projectPath string) {
 		fmt.Fprintf(os.Stderr, "Rescan triggered by %s\n", projectPath)
 		updated := discover.BuildSpec(cfg)
 		if err := spec.Emit(updated); err != nil {
 			fmt.Fprintf(os.Stderr, "error writing spec: %v\n", err)
+			w.SetScanning(false)
 			return
 		}
 		srv.SetSpec(updated)
 		fmt.Fprintf(os.Stderr, "Rescanned %d projects\n", len(updated.Projects))
+		w.SetScanning(false)
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error starting watcher: %v\n", err)
@@ -170,6 +173,7 @@ func runServe() {
 		os.Exit(1)
 	}
 
+	w.SetScanning(true)
 	for _, p := range s.Projects {
 		if p.Git != nil {
 			if err := w.WatchProject(p.Path); err != nil {
@@ -177,6 +181,7 @@ func runServe() {
 			}
 		}
 	}
+	w.SetScanning(false)
 
 	go func() {
 		fmt.Fprintf(os.Stderr, "Serving on :%d\n", port)

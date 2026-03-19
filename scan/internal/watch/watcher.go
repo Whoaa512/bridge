@@ -15,9 +15,11 @@ type Watcher struct {
 	onChange   func(projectPath string)
 	coalesceMs time.Duration
 
-	mu       sync.Mutex
-	pending  map[string]time.Time
-	projects map[string]string // watched dir → project path
+	mu        sync.Mutex
+	pending   map[string]time.Time
+	projects  map[string]string
+	scanning  bool
+	coolUntil time.Time
 
 	done chan struct{}
 }
@@ -50,6 +52,15 @@ func (w *Watcher) WatchProject(projectPath string) error {
 	w.mu.Unlock()
 
 	return w.watcher.Add(gitDir)
+}
+
+func (w *Watcher) SetScanning(v bool) {
+	w.mu.Lock()
+	w.scanning = v
+	if !v {
+		w.coolUntil = time.Now().Add(2 * time.Second)
+	}
+	w.mu.Unlock()
 }
 
 func (w *Watcher) Close() error {
@@ -90,6 +101,10 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	if w.suppressed() {
+		return
+	}
+
 	projectPath, ok := w.projects[dir]
 	if !ok {
 		parentDir := filepath.Dir(dir)
@@ -102,8 +117,21 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 	w.pending[projectPath] = time.Now()
 }
 
+func (w *Watcher) suppressed() bool {
+	return w.scanning || time.Now().Before(w.coolUntil)
+}
+
 func (w *Watcher) flushPending() {
 	w.mu.Lock()
+
+	if w.suppressed() {
+		for p := range w.pending {
+			delete(w.pending, p)
+		}
+		w.mu.Unlock()
+		return
+	}
+
 	now := time.Now()
 	var ready []string
 	for path, when := range w.pending {
@@ -114,12 +142,21 @@ func (w *Watcher) flushPending() {
 	for _, p := range ready {
 		delete(w.pending, p)
 	}
+
+	if len(ready) > 0 {
+		w.scanning = true
+	}
 	w.mu.Unlock()
+
+	if len(ready) == 0 {
+		return
+	}
 
 	for _, projectPath := range ready {
 		w.cache.InvalidatePrefix(projectPath)
-		if w.onChange != nil {
-			w.onChange(projectPath)
-		}
+	}
+
+	if w.onChange != nil {
+		w.onChange(ready[0])
 	}
 }
