@@ -110,6 +110,41 @@ function squarify(
   return nodes;
 }
 
+export interface TreemapGroup {
+  id: string;
+  label: string;
+  rect: Rect;
+  nodes: TreemapNode[];
+}
+
+export function groupedTreemap(
+  groups: { id: string; label: string; items: TreemapInput[] }[],
+  bounds: Rect,
+  groupPadding = 8,
+): TreemapGroup[] {
+  const nonEmpty = groups.filter((g) => g.items.length > 0);
+  if (nonEmpty.length === 0) return [];
+
+  const groupInputs: TreemapInput[] = nonEmpty.map((g) => ({
+    id: g.id,
+    weight: g.items.reduce((s, it) => s + it.weight, 0),
+  }));
+
+  const groupRects = treemap(groupInputs, bounds);
+
+  return groupRects.map((gr) => {
+    const group = nonEmpty.find((g) => g.id === gr.id)!;
+    const inset: Rect = {
+      x: gr.rect.x + groupPadding,
+      y: gr.rect.y + groupPadding,
+      w: Math.max(0, gr.rect.w - groupPadding * 2),
+      h: Math.max(0, gr.rect.h - groupPadding * 2),
+    };
+    const nodes = treemap(group.items, inset);
+    return { id: group.id, label: group.label, rect: gr.rect, nodes };
+  });
+}
+
 export function treemap(items: TreemapInput[], bounds: Rect): TreemapNode[] {
   if (items.length === 0) return [];
 

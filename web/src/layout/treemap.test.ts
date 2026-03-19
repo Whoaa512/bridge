@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import { treemap, type TreemapInput, type Rect } from "./treemap";
+import { treemap, groupedTreemap, type TreemapInput, type Rect } from "./treemap";
 
 const bounds: Rect = { x: 0, y: 0, w: 1000, h: 600 };
 
@@ -101,5 +101,84 @@ describe("treemap", () => {
   test("zero total weight → empty output", () => {
     const items: TreemapInput[] = [{ id: "a", weight: 0 }];
     expect(treemap(items, bounds)).toEqual([]);
+  });
+});
+
+describe("groupedTreemap", () => {
+  test("2 groups → each gets proportional area", () => {
+    const groups = [
+      {
+        id: "big",
+        label: "Big",
+        items: [
+          { id: "a", weight: 60 },
+          { id: "b", weight: 40 },
+        ],
+      },
+      {
+        id: "small",
+        label: "Small",
+        items: [{ id: "c", weight: 50 }],
+      },
+    ];
+
+    const result = groupedTreemap(groups, bounds);
+    expect(result).toHaveLength(2);
+
+    const bigGroup = result.find((g) => g.id === "big")!;
+    const smallGroup = result.find((g) => g.id === "small")!;
+
+    const bigArea = bigGroup.rect.w * bigGroup.rect.h;
+    const smallArea = smallGroup.rect.w * smallGroup.rect.h;
+    const totalArea = bounds.w * bounds.h;
+
+    expect(bigArea / totalArea).toBeCloseTo(100 / 150, 1);
+    expect(smallArea / totalArea).toBeCloseTo(50 / 150, 1);
+  });
+
+  test("empty group is skipped", () => {
+    const groups = [
+      { id: "full", label: "Full", items: [{ id: "a", weight: 10 }] },
+      { id: "empty", label: "Empty", items: [] },
+    ];
+
+    const result = groupedTreemap(groups, bounds);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("full");
+  });
+
+  test("all items within a group fit inside the group rect", () => {
+    const groups = [
+      {
+        id: "g1",
+        label: "G1",
+        items: [
+          { id: "a", weight: 30 },
+          { id: "b", weight: 20 },
+        ],
+      },
+      {
+        id: "g2",
+        label: "G2",
+        items: [
+          { id: "c", weight: 25 },
+          { id: "d", weight: 15 },
+          { id: "e", weight: 10 },
+        ],
+      },
+    ];
+
+    const result = groupedTreemap(groups, bounds);
+
+    for (const group of result) {
+      const gr = group.rect;
+      for (const node of group.nodes) {
+        const nr = node.rect;
+        expect(nr.x).toBeGreaterThanOrEqual(gr.x - 0.01);
+        expect(nr.y).toBeGreaterThanOrEqual(gr.y - 0.01);
+        expect(nr.x + nr.w).toBeLessThanOrEqual(gr.x + gr.w + 0.01);
+        expect(nr.y + nr.h).toBeLessThanOrEqual(gr.y + gr.h + 0.01);
+      }
+    }
   });
 });

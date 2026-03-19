@@ -1,8 +1,9 @@
-import type { Project } from "../core/types";
-import type { Rect, TreemapNode } from "../layout/treemap";
-import { treemap } from "../layout/treemap";
+import type { Classification, Project } from "../core/types";
+import type { Rect, TreemapNode, TreemapGroup } from "../layout/treemap";
+import { groupedTreemap } from "../layout/treemap";
 import { computeWeight } from "../layout/weight";
 import { COLORS, classificationColor, activityGlow } from "./colors";
+import { renderGroupLabel } from "./groups";
 import type { Camera } from "./camera";
 import { applyCamera, resetCamera, DEFAULT_CAMERA } from "./camera";
 
@@ -123,7 +124,20 @@ function renderTile(
   ctx.restore();
 }
 
-export function computeLayout(projects: Project[], viewport: Rect): TreemapNode[] {
+export interface ColonyLayout {
+  groups: TreemapGroup[];
+  nodes: TreemapNode[];
+  classificationByGroup: Map<string, Classification>;
+}
+
+const CLASSIFICATION_ORDER: Classification[] = ["public", "internal", "personal"];
+const CLASSIFICATION_LABELS: Record<Classification, string> = {
+  public: "Public",
+  internal: "Internal",
+  personal: "Personal",
+};
+
+export function computeLayout(projects: Project[], viewport: Rect): ColonyLayout {
   const margin = 20;
   const bounds: Rect = {
     x: viewport.x + margin,
@@ -132,18 +146,34 @@ export function computeLayout(projects: Project[], viewport: Rect): TreemapNode[
     h: Math.max(0, viewport.h - margin * 2),
   };
 
-  const items = projects.map((p) => ({
-    id: p.id,
-    weight: computeWeight(p),
-  }));
+  const byClass = new Map<Classification, Project[]>();
+  for (const p of projects) {
+    const list = byClass.get(p.classification) ?? [];
+    list.push(p);
+    byClass.set(p.classification, list);
+  }
 
-  return treemap(items, bounds);
+  const groupInputs = CLASSIFICATION_ORDER
+    .filter((c) => byClass.has(c))
+    .map((c) => ({
+      id: c,
+      label: CLASSIFICATION_LABELS[c],
+      items: byClass.get(c)!.map((p) => ({ id: p.id, weight: computeWeight(p) })),
+    }));
+
+  const groups = groupedTreemap(groupInputs, bounds);
+  const nodes = groups.flatMap((g) => g.nodes);
+  const classificationByGroup = new Map<string, Classification>(
+    groups.map((g) => [g.id, g.id as Classification]),
+  );
+
+  return { groups, nodes, classificationByGroup };
 }
 
 export function renderColonyMap(
   ctx: CanvasRenderingContext2D,
   projectMap: Map<string, Project>,
-  nodes: TreemapNode[],
+  layout: ColonyLayout,
   viewport: Rect,
   hoveredId: string | null,
   time: number,
@@ -156,7 +186,14 @@ export function renderColonyMap(
 
   applyCamera(ctx, camera);
 
-  for (const node of nodes) {
+  for (const group of layout.groups) {
+    const classification = layout.classificationByGroup.get(group.id);
+    if (classification) {
+      renderGroupLabel(ctx, group, classification);
+    }
+  }
+
+  for (const node of layout.nodes) {
     const project = projectMap.get(node.id);
     if (!project) continue;
     renderTile(ctx, node, project, node.id === hoveredId, time);

@@ -18,7 +18,7 @@ import {
   zoomAtPoint,
   contentBounds,
 } from "./canvas";
-import { showDrawer, hideDrawer, showLoading, hideLoading, showEmpty } from "./ui";
+import { showDrawer, hideDrawer, showLoading, hideLoading, showEmpty, hideEmpty } from "./ui";
 
 const LERP_SPEED = 0.15;
 const FOCUS_ZOOM = 2.0;
@@ -36,6 +36,7 @@ interface State {
   dpr: number;
   camera: Camera;
   targetCamera: Camera;
+  renderLoopStarted: boolean;
 }
 
 interface DragState {
@@ -93,6 +94,9 @@ function nodeRect(nodes: TreemapNode[], id: string): Rect | null {
 }
 
 function startRenderLoop(state: State) {
+  if (state.renderLoopStarted) return;
+  state.renderLoopStarted = true;
+
   function frame(time: number) {
     if (!camerasEqual(state.camera, state.targetCamera)) {
       state.camera = lerpCamera(state.camera, state.targetCamera, LERP_SPEED);
@@ -133,6 +137,18 @@ function showError(message: string) {
   root.appendChild(div);
 }
 
+function initStateFromSpec(state: State, spec: BridgeSpec) {
+  state.spec = spec;
+  state.visibleProjects = filterProjects(spec.projects, DEFAULT_FILTER);
+  state.projectMap = buildProjectMap(state.visibleProjects);
+  state.nodes = computeLayout(state.visibleProjects, state.viewport);
+  state.animating = hasActiveProjects(state.visibleProjects);
+  const cam = fitCamera(state.nodes, state.viewport);
+  state.camera = cam;
+  state.targetCamera = cam;
+  state.dirty = true;
+}
+
 async function main() {
   const canvas = document.getElementById("colony") as HTMLCanvasElement;
   if (!canvas) throw new Error("Canvas element not found");
@@ -150,11 +166,6 @@ async function main() {
     return;
   }
   hideLoading();
-
-  if (spec.projects.length === 0) {
-    showEmpty();
-    return;
-  }
 
   const viewport = getViewport();
   const visibleProjects = filterProjects(spec.projects, DEFAULT_FILTER);
@@ -176,6 +187,7 @@ async function main() {
     dpr,
     camera: initialCamera,
     targetCamera: initialCamera,
+    renderLoopStarted: false,
   };
 
   const drag: DragState = {
@@ -273,8 +285,21 @@ async function main() {
 
   window.addEventListener("resize", () => resizeCanvas(canvas, state));
 
+  const hasProjects = spec.projects.length > 0;
+
+  if (!hasProjects) {
+    showEmpty();
+  }
+
   connectWS({
     onSpec: (newSpec) => {
+      if (!state.renderLoopStarted && newSpec.projects.length > 0) {
+        hideEmpty();
+        initStateFromSpec(state, newSpec);
+        startRenderLoop(state);
+        return;
+      }
+
       state.spec = newSpec;
       state.visibleProjects = filterProjects(newSpec.projects, DEFAULT_FILTER);
       state.projectMap = buildProjectMap(state.visibleProjects);
@@ -286,7 +311,9 @@ async function main() {
     onReconnect: () => console.log("[bridge] ws reconnected"),
   });
 
-  startRenderLoop(state);
+  if (hasProjects) {
+    startRenderLoop(state);
+  }
 }
 
 main().catch((err) => {
