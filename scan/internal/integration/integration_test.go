@@ -5,11 +5,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/cjwinslow/bridge/scan/internal/config"
 	"github.com/cjwinslow/bridge/scan/internal/discover"
 	"github.com/cjwinslow/bridge/scan/internal/spec"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 func makeGitRepo(t *testing.T, dir string, files map[string]string) {
@@ -223,4 +225,92 @@ func TestIntegrationSpecEmission(t *testing.T) {
 	if len(loaded.Projects) != 1 {
 		t.Errorf("loaded projects = %d, want 1", len(loaded.Projects))
 	}
+}
+
+func schemaPath(t *testing.T) string {
+	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	return filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "spec", "bridge-spec.schema.json")
+}
+
+func validateSpecAgainstSchema(t *testing.T, s *spec.BridgeSpec) {
+	t.Helper()
+
+	data, err := json.Marshal(s)
+	if err != nil {
+		t.Fatalf("marshal spec: %v", err)
+	}
+
+	var inst any
+	if err := json.Unmarshal(data, &inst); err != nil {
+		t.Fatalf("unmarshal to any: %v", err)
+	}
+
+	sp := schemaPath(t)
+	c := jsonschema.NewCompiler()
+	sch, err := c.Compile(sp)
+	if err != nil {
+		t.Fatalf("compile schema: %v", err)
+	}
+
+	if err := sch.Validate(inst); err != nil {
+		t.Fatalf("schema validation failed:\n%v", err)
+	}
+}
+
+func TestSpecValidatesAgainstSchema(t *testing.T) {
+	t.Run("simple_repo", func(t *testing.T) {
+		tmp := t.TempDir()
+		t.Setenv("HOME", tmp)
+
+		scanRoot := filepath.Join(tmp, "code")
+		makeGitRepo(t, filepath.Join(scanRoot, "myproject"), map[string]string{
+			"main.go": "package main",
+		})
+
+		cfg := config.NewDefault([]string{scanRoot})
+		s := discover.BuildSpec(cfg)
+		validateSpecAgainstSchema(t, s)
+	})
+
+	t.Run("monorepo_and_broken_git", func(t *testing.T) {
+		tmp := t.TempDir()
+		t.Setenv("HOME", tmp)
+
+		scanRoot := filepath.Join(tmp, "code")
+
+		makeGitRepo(t, filepath.Join(scanRoot, "mono"), map[string]string{
+			"package.json":          `{"workspaces":["packages/*"]}`,
+			"packages/ui/index.js":  "// ui",
+			"packages/api/index.js": "// api",
+		})
+
+		broken := filepath.Join(scanRoot, "broken")
+		os.MkdirAll(filepath.Join(broken, ".git"), 0755)
+
+		cfg := config.NewDefault([]string{scanRoot})
+		s := discover.BuildSpec(cfg)
+
+		hasMono := false
+		hasBroken := false
+		for _, p := range s.Projects {
+			if p.Kind == "monorepo_child" {
+				hasMono = true
+			}
+			if len(p.Errors) > 0 {
+				hasBroken = true
+			}
+		}
+		if !hasMono {
+			t.Error("expected at least one monorepo_child project")
+		}
+		if !hasBroken {
+			t.Error("expected at least one project with errors")
+		}
+
+		validateSpecAgainstSchema(t, s)
+	})
 }
