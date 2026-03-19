@@ -4,13 +4,26 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cjwinslow/bridge/scan/internal/config"
 	"github.com/cjwinslow/bridge/scan/internal/git"
 	"github.com/cjwinslow/bridge/scan/internal/spec"
 )
+
+type projectWork struct {
+	index int
+	dp    Project
+}
+
+type projectResult struct {
+	index       int
+	parent      spec.Project
+	children    []spec.Project
+}
 
 func BuildSpec(cfg *config.Config) *spec.BridgeSpec {
 	result := Walk(cfg.ScanRoots, cfg.Ignore)
@@ -47,25 +60,76 @@ func BuildSpec(cfg *config.Config) *spec.BridgeSpec {
 		},
 	}
 
-	for _, dp := range result.Projects {
-		sp := buildProject(dp, cfg)
-		s.Projects = append(s.Projects, sp)
+	workers := runtime.NumCPU()
+	if workers > 8 {
+		workers = 8
+	}
 
-		for _, childPath := range dp.MonorepoChildren {
-			child := buildMonorepoChild(dp, childPath, cfg)
-			s.Projects = append(s.Projects, child)
-			sp.Subprojects = append(sp.Subprojects, child.ID)
-		}
+	work := make(chan projectWork)
+	results := make([]projectResult, len(result.Projects))
 
-		for i, p := range s.Projects {
-			if p.ID == sp.ID {
-				s.Projects[i] = sp
-				break
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for w := range work {
+				results[w.index] = processProject(w.dp, cfg)
+				results[w.index].index = w.index
 			}
-		}
+		}()
+	}
+
+	for i, dp := range result.Projects {
+		work <- projectWork{index: i, dp: dp}
+	}
+	close(work)
+	wg.Wait()
+
+	for _, r := range results {
+		s.Projects = append(s.Projects, r.parent)
+		s.Projects = append(s.Projects, r.children...)
 	}
 
 	return s
+}
+
+func processProject(dp Project, cfg *config.Config) (r projectResult) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			id := makeProjectID(dp.Path, cfg.ScanRoots)
+			r.parent = spec.Project{
+				ID:          id,
+				Path:        dp.Path,
+				Name:        dp.Name,
+				Kind:        dp.Kind,
+				Languages:   []string{},
+				PRs:         []spec.PR{},
+				Tasks:       []spec.Task{},
+				Subprojects: []string{},
+				Flags:       []string{},
+				Errors: []spec.ScanErr{{
+					Source:  "scanner",
+					Message: fmt.Sprintf("panic: %v", rec),
+					At:      time.Now().UTC(),
+				}},
+			}
+			r.children = nil
+		}
+	}()
+
+	sp := buildProject(dp, cfg)
+
+	var children []spec.Project
+	for _, childPath := range dp.MonorepoChildren {
+		child := buildMonorepoChild(dp, childPath, cfg)
+		children = append(children, child)
+		sp.Subprojects = append(sp.Subprojects, child.ID)
+	}
+
+	r.parent = sp
+	r.children = children
+	return r
 }
 
 func buildProject(dp Project, cfg *config.Config) spec.Project {
