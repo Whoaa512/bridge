@@ -3,8 +3,25 @@ import { connectWS } from "./core/ws";
 import { filterProjects, DEFAULT_FILTER } from "./core/filter";
 import type { BridgeSpec, Project } from "./core/types";
 import type { Rect, TreemapNode } from "./layout/treemap";
-import { computeLayout, renderColonyMap, buildProjectMap, hasActiveProjects, hitTest } from "./canvas";
+import {
+  computeLayout,
+  renderColonyMap,
+  buildProjectMap,
+  hasActiveProjects,
+  hitTest,
+  type Camera,
+  DEFAULT_CAMERA,
+  lerpCamera,
+  camerasEqual,
+  cameraToFit,
+  cameraForRect,
+  zoomAtPoint,
+  contentBounds,
+} from "./canvas";
 import { showDrawer, hideDrawer, showLoading, hideLoading, showEmpty } from "./ui";
+
+const LERP_SPEED = 0.15;
+const FOCUS_ZOOM = 2.0;
 
 interface State {
   ctx: CanvasRenderingContext2D;
@@ -17,6 +34,17 @@ interface State {
   dirty: boolean;
   animating: boolean;
   dpr: number;
+  camera: Camera;
+  targetCamera: Camera;
+}
+
+interface DragState {
+  active: boolean;
+  startX: number;
+  startY: number;
+  startCamX: number;
+  startCamY: number;
+  moved: boolean;
 }
 
 function getViewport(): Rect {
@@ -48,13 +76,43 @@ function resizeCanvas(canvas: HTMLCanvasElement, state: State) {
   state.dpr = dpr;
   state.viewport = getViewport();
   state.nodes = computeLayout(state.visibleProjects, state.viewport);
+  const fitCam = fitCamera(state.nodes, state.viewport);
+  state.targetCamera = fitCam;
   state.dirty = true;
+}
+
+function fitCamera(nodes: TreemapNode[], viewport: Rect): Camera {
+  if (nodes.length === 0) return DEFAULT_CAMERA;
+  const bounds = contentBounds(nodes.map((n) => n.rect));
+  return cameraToFit(bounds, viewport);
+}
+
+function nodeRect(nodes: TreemapNode[], id: string): Rect | null {
+  const node = nodes.find((n) => n.id === id);
+  return node ? node.rect : null;
 }
 
 function startRenderLoop(state: State) {
   function frame(time: number) {
+    if (!camerasEqual(state.camera, state.targetCamera)) {
+      state.camera = lerpCamera(state.camera, state.targetCamera, LERP_SPEED);
+      if (camerasEqual(state.camera, state.targetCamera)) {
+        state.camera = { ...state.targetCamera };
+      }
+      state.dirty = true;
+    }
+
     if (state.dirty || state.animating) {
-      renderColonyMap(state.ctx, state.projectMap, state.nodes, state.viewport, state.hoveredId, time);
+      renderColonyMap(
+        state.ctx,
+        state.projectMap,
+        state.nodes,
+        state.viewport,
+        state.hoveredId,
+        time,
+        state.camera,
+        state.dpr,
+      );
       state.dirty = false;
     }
     requestAnimationFrame(frame);
@@ -103,24 +161,88 @@ async function main() {
   const nodes = computeLayout(visibleProjects, viewport);
   const projectMap = buildProjectMap(visibleProjects);
   const animating = hasActiveProjects(visibleProjects);
+  const initialCamera = fitCamera(nodes, viewport);
 
-  const state: State = { ctx, spec, visibleProjects, projectMap, nodes, viewport, hoveredId: null, dirty: true, animating, dpr };
+  const state: State = {
+    ctx,
+    spec,
+    visibleProjects,
+    projectMap,
+    nodes,
+    viewport,
+    hoveredId: null,
+    dirty: true,
+    animating,
+    dpr,
+    camera: initialCamera,
+    targetCamera: initialCamera,
+  };
 
-  canvas.addEventListener("mousemove", (e) => {
+  const drag: DragState = {
+    active: false,
+    startX: 0,
+    startY: 0,
+    startCamX: 0,
+    startCamY: 0,
+    moved: false,
+  };
+
+  canvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const factor = e.deltaY > 0 ? 0.9 : 1.1;
+    state.targetCamera = zoomAtPoint(state.targetCamera, e.clientX, e.clientY, factor);
+  }, { passive: false });
+
+  canvas.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    drag.active = true;
+    drag.moved = false;
+    drag.startX = e.clientX;
+    drag.startY = e.clientY;
+    drag.startCamX = state.targetCamera.x;
+    drag.startCamY = state.targetCamera.y;
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (drag.active) {
+      const dx = e.clientX - drag.startX;
+      const dy = e.clientY - drag.startY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) drag.moved = true;
+
+      if (drag.moved) {
+        state.targetCamera = {
+          ...state.targetCamera,
+          x: drag.startCamX - dx / state.targetCamera.zoom,
+          y: drag.startCamY - dy / state.targetCamera.zoom,
+        };
+        canvas.style.cursor = "grabbing";
+      }
+      return;
+    }
+
     const prev = state.hoveredId;
-    state.hoveredId = hitTest(state.nodes, e.clientX, e.clientY);
+    state.hoveredId = hitTest(state.nodes, e.clientX, e.clientY, state.camera);
     if (state.hoveredId !== prev) state.dirty = true;
     canvas.style.cursor = state.hoveredId ? "pointer" : "default";
+  });
+
+  window.addEventListener("mouseup", () => {
+    if (drag.active) {
+      drag.active = false;
+      if (!drag.moved) return;
+      canvas.style.cursor = state.hoveredId ? "pointer" : "default";
+    }
   });
 
   canvas.addEventListener("mouseleave", () => {
     if (state.hoveredId !== null) state.dirty = true;
     state.hoveredId = null;
-    canvas.style.cursor = "default";
+    if (!drag.active) canvas.style.cursor = "default";
   });
 
   canvas.addEventListener("click", (e) => {
-    const id = hitTest(state.nodes, e.clientX, e.clientY);
+    if (drag.moved) return;
+    const id = hitTest(state.nodes, e.clientX, e.clientY, state.camera);
     if (!id) {
       hideDrawer();
       return;
@@ -130,6 +252,21 @@ async function main() {
     showDrawer(project);
   });
 
+  canvas.addEventListener("dblclick", (e) => {
+    const id = hitTest(state.nodes, e.clientX, e.clientY, state.camera);
+    if (!id) {
+      state.targetCamera = fitCamera(state.nodes, state.viewport);
+      return;
+    }
+    const rect = nodeRect(state.nodes, id);
+    if (!rect) return;
+    const focused = cameraForRect(rect, state.viewport);
+    state.targetCamera = {
+      ...focused,
+      zoom: Math.max(focused.zoom, FOCUS_ZOOM),
+    };
+  });
+
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape") hideDrawer();
   });
@@ -137,9 +274,9 @@ async function main() {
   window.addEventListener("resize", () => resizeCanvas(canvas, state));
 
   connectWS({
-    onSpec: (spec) => {
-      state.spec = spec;
-      state.visibleProjects = filterProjects(spec.projects, DEFAULT_FILTER);
+    onSpec: (newSpec) => {
+      state.spec = newSpec;
+      state.visibleProjects = filterProjects(newSpec.projects, DEFAULT_FILTER);
       state.projectMap = buildProjectMap(state.visibleProjects);
       state.nodes = computeLayout(state.visibleProjects, state.viewport);
       state.dirty = true;

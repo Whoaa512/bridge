@@ -3,6 +3,8 @@ import type { Rect, TreemapNode } from "../layout/treemap";
 import { treemap } from "../layout/treemap";
 import { computeWeight } from "../layout/weight";
 import { COLORS, classificationColor, activityGlow } from "./colors";
+import type { Camera } from "./camera";
+import { applyCamera, resetCamera, DEFAULT_CAMERA } from "./camera";
 
 const TILE_GAP = 4;
 const CORNER_RADIUS = 4;
@@ -145,16 +147,22 @@ export function renderColonyMap(
   viewport: Rect,
   hoveredId: string | null,
   time: number,
+  camera: Camera = DEFAULT_CAMERA,
+  dpr = 1,
 ): void {
   ctx.clearRect(viewport.x, viewport.y, viewport.w, viewport.h);
   ctx.fillStyle = COLORS.background;
   ctx.fillRect(viewport.x, viewport.y, viewport.w, viewport.h);
+
+  applyCamera(ctx, camera);
 
   for (const node of nodes) {
     const project = projectMap.get(node.id);
     if (!project) continue;
     renderTile(ctx, node, project, node.id === hoveredId, time);
   }
+
+  resetCamera(ctx, dpr);
 }
 
 export function buildProjectMap(projects: Project[]): Map<string, Project> {
