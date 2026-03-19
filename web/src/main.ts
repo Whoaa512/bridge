@@ -10,6 +10,7 @@ import {
   hasActiveProjects,
   hitTest,
   type Camera,
+  type ColonyLayout,
   DEFAULT_CAMERA,
   lerpCamera,
   camerasEqual,
@@ -28,7 +29,7 @@ interface State {
   spec: BridgeSpec;
   visibleProjects: Project[];
   projectMap: Map<string, Project>;
-  nodes: TreemapNode[];
+  layout: ColonyLayout;
   viewport: Rect;
   hoveredId: string | null;
   dirty: boolean;
@@ -76,8 +77,8 @@ function resizeCanvas(canvas: HTMLCanvasElement, state: State) {
   state.ctx.scale(dpr, dpr);
   state.dpr = dpr;
   state.viewport = getViewport();
-  state.nodes = computeLayout(state.visibleProjects, state.viewport);
-  const fitCam = fitCamera(state.nodes, state.viewport);
+  state.layout = computeLayout(state.visibleProjects, state.viewport);
+  const fitCam = fitCamera(state.layout.nodes, state.viewport);
   state.targetCamera = fitCam;
   state.dirty = true;
 }
@@ -110,7 +111,7 @@ function startRenderLoop(state: State) {
       renderColonyMap(
         state.ctx,
         state.projectMap,
-        state.nodes,
+        state.layout,
         state.viewport,
         state.hoveredId,
         time,
@@ -141,9 +142,9 @@ function initStateFromSpec(state: State, spec: BridgeSpec) {
   state.spec = spec;
   state.visibleProjects = filterProjects(spec.projects, DEFAULT_FILTER);
   state.projectMap = buildProjectMap(state.visibleProjects);
-  state.nodes = computeLayout(state.visibleProjects, state.viewport);
+  state.layout = computeLayout(state.visibleProjects, state.viewport);
   state.animating = hasActiveProjects(state.visibleProjects);
-  const cam = fitCamera(state.nodes, state.viewport);
+  const cam = fitCamera(state.layout.nodes, state.viewport);
   state.camera = cam;
   state.targetCamera = cam;
   state.dirty = true;
@@ -169,17 +170,17 @@ async function main() {
 
   const viewport = getViewport();
   const visibleProjects = filterProjects(spec.projects, DEFAULT_FILTER);
-  const nodes = computeLayout(visibleProjects, viewport);
+  const layout = computeLayout(visibleProjects, viewport);
   const projectMap = buildProjectMap(visibleProjects);
   const animating = hasActiveProjects(visibleProjects);
-  const initialCamera = fitCamera(nodes, viewport);
+  const initialCamera = fitCamera(layout.nodes, viewport);
 
   const state: State = {
     ctx,
     spec,
     visibleProjects,
     projectMap,
-    nodes,
+    layout,
     viewport,
     hoveredId: null,
     dirty: true,
@@ -233,7 +234,7 @@ async function main() {
     }
 
     const prev = state.hoveredId;
-    state.hoveredId = hitTest(state.nodes, e.clientX, e.clientY, state.camera);
+    state.hoveredId = hitTest(state.layout.nodes, e.clientX, e.clientY, state.camera);
     if (state.hoveredId !== prev) state.dirty = true;
     canvas.style.cursor = state.hoveredId ? "pointer" : "default";
   });
@@ -254,7 +255,7 @@ async function main() {
 
   canvas.addEventListener("click", (e) => {
     if (drag.moved) return;
-    const id = hitTest(state.nodes, e.clientX, e.clientY, state.camera);
+    const id = hitTest(state.layout.nodes, e.clientX, e.clientY, state.camera);
     if (!id) {
       hideDrawer();
       return;
@@ -265,12 +266,12 @@ async function main() {
   });
 
   canvas.addEventListener("dblclick", (e) => {
-    const id = hitTest(state.nodes, e.clientX, e.clientY, state.camera);
+    const id = hitTest(state.layout.nodes, e.clientX, e.clientY, state.camera);
     if (!id) {
-      state.targetCamera = fitCamera(state.nodes, state.viewport);
+      state.targetCamera = fitCamera(state.layout.nodes, state.viewport);
       return;
     }
-    const rect = nodeRect(state.nodes, id);
+    const rect = nodeRect(state.layout.nodes, id);
     if (!rect) return;
     const focused = cameraForRect(rect, state.viewport);
     state.targetCamera = {
@@ -303,7 +304,7 @@ async function main() {
       state.spec = newSpec;
       state.visibleProjects = filterProjects(newSpec.projects, DEFAULT_FILTER);
       state.projectMap = buildProjectMap(state.visibleProjects);
-      state.nodes = computeLayout(state.visibleProjects, state.viewport);
+      state.layout = computeLayout(state.visibleProjects, state.viewport);
       state.dirty = true;
       state.animating = hasActiveProjects(state.visibleProjects);
     },
