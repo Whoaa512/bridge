@@ -20,7 +20,6 @@ type projectWork struct {
 }
 
 type projectResult struct {
-	index       int
 	parent      spec.Project
 	children    []spec.Project
 }
@@ -60,6 +59,10 @@ func BuildSpec(cfg *config.Config) *spec.BridgeSpec {
 		},
 	}
 
+	if len(result.Projects) == 0 {
+		return s
+	}
+
 	workers := runtime.NumCPU()
 	if workers > 8 {
 		workers = 8
@@ -75,7 +78,6 @@ func BuildSpec(cfg *config.Config) *spec.BridgeSpec {
 			defer wg.Done()
 			for w := range work {
 				results[w.index] = processProject(w.dp, cfg)
-				results[w.index].index = w.index
 			}
 		}()
 	}
@@ -98,16 +100,19 @@ func processProject(dp Project, cfg *config.Config) (r projectResult) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			id := makeProjectID(dp.Path, cfg.ScanRoots)
+			cl := Classify(nil, dp.HasInfra, cfg.Classifications[id])
 			r.parent = spec.Project{
-				ID:          id,
-				Path:        dp.Path,
-				Name:        dp.Name,
-				Kind:        dp.Kind,
-				Languages:   []string{},
-				PRs:         []spec.PR{},
-				Tasks:       []spec.Task{},
-				Subprojects: []string{},
-				Flags:       []string{},
+				ID:                   id,
+				Path:                 dp.Path,
+				Name:                 dp.Name,
+				Kind:                 dp.Kind,
+				Classification:       cl.Class,
+				ClassificationSource: cl.Source,
+				Languages:            []string{},
+				PRs:                  []spec.PR{},
+				Tasks:                []spec.Task{},
+				Subprojects:          []string{},
+				Flags:                []string{},
 				Errors: []spec.ScanErr{{
 					Source:  "scanner",
 					Message: fmt.Sprintf("panic: %v", rec),
@@ -120,9 +125,14 @@ func processProject(dp Project, cfg *config.Config) (r projectResult) {
 
 	sp := buildProject(dp, cfg)
 
+	var parentRemoteURL *string
+	if sp.Git != nil {
+		parentRemoteURL = sp.Git.RemoteURL
+	}
+
 	var children []spec.Project
 	for _, childPath := range dp.MonorepoChildren {
-		child := buildMonorepoChild(dp, childPath, cfg)
+		child := buildMonorepoChild(dp, parentRemoteURL, childPath, cfg)
 		children = append(children, child)
 		sp.Subprojects = append(sp.Subprojects, child.ID)
 	}
@@ -205,7 +215,7 @@ func buildProject(dp Project, cfg *config.Config) spec.Project {
 	return p
 }
 
-func buildMonorepoChild(parent Project, childPath string, cfg *config.Config) spec.Project {
+func buildMonorepoChild(parent Project, parentRemoteURL *string, childPath string, cfg *config.Config) spec.Project {
 	id := makeProjectID(childPath, cfg.ScanRoots)
 	name := filepath.Base(childPath)
 
@@ -224,12 +234,7 @@ func buildMonorepoChild(parent Project, childPath string, cfg *config.Config) sp
 		Errors:               []spec.ScanErr{},
 	}
 
-	cl := Classify(nil, false, cfg.Classifications[id])
-	if parent.IsGit {
-		if stats, err := git.GetStats(parent.Path); err == nil && stats.RemoteURL != nil {
-			cl = Classify(stats.RemoteURL, parent.HasInfra, cfg.Classifications[id])
-		}
-	}
+	cl := Classify(parentRemoteURL, parent.HasInfra, cfg.Classifications[id])
 	p.Classification = cl.Class
 	p.ClassificationSource = cl.Source
 
