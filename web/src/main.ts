@@ -1,7 +1,8 @@
 import { loadSpec } from "./core/loader";
-import type { BridgeSpec } from "./core/types";
+import type { BridgeSpec, Project } from "./core/types";
 import type { Rect, TreemapNode } from "./layout/treemap";
 import { computeLayout, renderColonyMap, hitTest } from "./canvas";
+import { showDrawer, hideDrawer, showLoading, hideLoading, showEmpty, hideEmpty } from "./ui";
 
 interface State {
   ctx: CanvasRenderingContext2D;
@@ -51,15 +52,28 @@ function startRenderLoop(state: State) {
   requestAnimationFrame(frame);
 }
 
+function findProject(spec: BridgeSpec, id: string): Project | undefined {
+  return spec.projects.find((p) => p.id === id);
+}
+
 async function main() {
   const canvas = document.getElementById("colony") as HTMLCanvasElement;
   if (!canvas) throw new Error("Canvas element not found");
 
   const { ctx, dpr } = setupCanvas(canvas);
+
+  showLoading();
   const spec = await loadSpec();
+  hideLoading();
+
+  if (spec.projects.length === 0) {
+    showEmpty();
+    return;
+  }
+  hideEmpty();
+
   const viewport = getViewport();
   const nodes = computeLayout(spec, viewport);
-
   const state: State = { ctx, spec, nodes, viewport, hoveredId: null, dpr };
 
   canvas.addEventListener("mousemove", (e) => {
@@ -70,6 +84,21 @@ async function main() {
   canvas.addEventListener("mouseleave", () => {
     state.hoveredId = null;
     canvas.style.cursor = "default";
+  });
+
+  canvas.addEventListener("click", (e) => {
+    const id = hitTest(state.nodes, e.clientX, e.clientY);
+    if (!id) {
+      hideDrawer();
+      return;
+    }
+    const project = findProject(state.spec, id);
+    if (!project) return;
+    showDrawer(project);
+  });
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") hideDrawer();
   });
 
   window.addEventListener("resize", () => resizeCanvas(canvas, state));
