@@ -1,4 +1,5 @@
 import type { BridgeSpec } from "./types";
+import { cacheSpec } from "./loader";
 
 export interface WSCallbacks {
   onSpec: (spec: BridgeSpec) => void;
@@ -37,6 +38,7 @@ export function connectWS(callbacks: WSCallbacks): { close: () => void } {
       try {
         const msg = JSON.parse(e.data);
         if (msg.type === "full_sync" && msg.spec) {
+          cacheSpec(msg.spec);
           callbacks.onSpec(msg.spec);
         }
       } catch {
