@@ -47,7 +47,7 @@ export default function WorkspaceView() {
   }
 
   const projects = filterProjects(spec.projects, DEFAULT_FILTER);
-  const attentionItems = computeAttentionItems(projects);
+  const attentionItems = computeAttentionItems(projects, sessions);
 
   const branchCount = projects.reduce((sum, p) => sum + (p.git?.branches.length ?? 0), 0);
   const prCount = projects.reduce((sum, p) => sum + p.prs.length, 0);
