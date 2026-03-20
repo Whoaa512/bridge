@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useBridgeStore } from "../store";
+import { sendCommand } from "../agent/commands";
 import SessionSidebar from "./sessions/SessionSidebar";
 import ChatArea from "./sessions/ChatArea";
 import Composer from "./sessions/Composer";
@@ -25,6 +26,25 @@ export default function SessionsView() {
     if (first.done) return;
     useBridgeStore.getState().setActiveSessionId(first.value.id);
   }, [sessions, activeSessionId]);
+
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key !== "Escape") return;
+    const tag = document.activeElement?.tagName;
+    if (tag === "TEXTAREA" || tag === "INPUT") return;
+
+    const { activeSessionId: sid, sessions: sess } = useBridgeStore.getState();
+    if (!sid) return;
+    const session = sess.get(sid);
+    if (session?.state !== "streaming") return;
+
+    e.preventDefault();
+    sendCommand(sid, { type: "abort" });
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
 
   return (
     <div style={styles.container}>
