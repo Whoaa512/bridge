@@ -1,6 +1,6 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
-import { initCanvas } from "./canvas/bridge";
+import { initCanvas, type FilterMode } from "./canvas/bridge";
 import { connectWS, type WSHandle } from "./core/ws";
 import { loadSpec } from "./core/loader";
 import { showLoading, hideLoading, updateLoading, showEmpty, hideEmpty } from "./ui";
@@ -18,10 +18,18 @@ if (!canvas) throw new Error("Canvas element not found");
 
 const handle = initCanvas(canvas);
 
+const FILTER_BY_VIEW: Record<View, FilterMode> = {
+  complexity: "default",
+  colony: "all",
+  workspace: "default",
+  sessions: "default",
+};
+
 useBridgeStore.subscribe(
   (state, prev) => {
     if (state.activeView === prev.activeView) return;
     handle.setVisible(CANVAS_VIEWS.has(state.activeView));
+    handle.setFilterMode(FILTER_BY_VIEW[state.activeView]);
   },
 );
 

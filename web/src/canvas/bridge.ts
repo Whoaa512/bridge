@@ -1,4 +1,4 @@
-import { filterProjects, DEFAULT_FILTER } from "../core/filter";
+import { filterProjects, DEFAULT_FILTER, type FilterOptions } from "../core/filter";
 import type { BridgeSpec, Project } from "../core/types";
 import type { Rect, TreemapNode } from "../layout/treemap";
 import {
@@ -24,10 +24,13 @@ import { showDrawer, hideDrawer } from "../ui";
 const LERP_SPEED = 0.15;
 const FOCUS_ZOOM = 2.0;
 
+export type FilterMode = "default" | "all";
+
 export interface CanvasHandle {
   destroy(): void;
   setVisible(visible: boolean): void;
   updateSpec(spec: BridgeSpec): void;
+  setFilterMode(mode: FilterMode): void;
 }
 
 interface State {
@@ -46,6 +49,7 @@ interface State {
   renderLoopRunning: boolean;
   visible: boolean;
   destroyed: boolean;
+  filterMode: FilterMode;
 }
 
 interface DragState {
@@ -102,9 +106,14 @@ function resizeCanvas(canvas: HTMLCanvasElement, state: State) {
   state.dirty = true;
 }
 
+function filterForMode(mode: FilterMode): FilterOptions {
+  if (mode === "all") return { showMonorepoChildren: true };
+  return DEFAULT_FILTER;
+}
+
 function applySpec(state: State, spec: BridgeSpec) {
   state.spec = spec;
-  state.visibleProjects = filterProjects(spec.projects, DEFAULT_FILTER);
+  state.visibleProjects = filterProjects(spec.projects, filterForMode(state.filterMode));
   state.projectMap = buildProjectMap(state.visibleProjects);
   state.layout = computeLayout(state.visibleProjects, state.viewport);
   state.animating = hasActiveProjects(state.visibleProjects);
@@ -139,6 +148,7 @@ export function initCanvas(canvas: HTMLCanvasElement): CanvasHandle {
     renderLoopRunning: false,
     visible: true,
     destroyed: false,
+    filterMode: "default",
   };
 
   const drag: DragState = {
@@ -317,6 +327,14 @@ export function initCanvas(canvas: HTMLCanvasElement): CanvasHandle {
       }
 
       applySpec(state, spec);
+    },
+
+    setFilterMode(mode: FilterMode) {
+      if (state.filterMode === mode) return;
+      state.filterMode = mode;
+      if (state.spec) {
+        applySpec(state, state.spec);
+      }
     },
   };
 }
