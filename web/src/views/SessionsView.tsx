@@ -1,16 +1,34 @@
+import { useState, useEffect } from "react";
 import { useBridgeStore } from "../store";
 import SessionSidebar from "./sessions/SessionSidebar";
 import ChatArea from "./sessions/ChatArea";
 import Composer from "./sessions/Composer";
+import NewSessionDialog from "./sessions/NewSessionDialog";
 
 export default function SessionsView() {
   const activeSessionId = useBridgeStore((s) => s.activeSessionId);
   const sessions = useBridgeStore((s) => s.sessions);
+  const [showNewDialog, setShowNewDialog] = useState(false);
+
   const activeSession = activeSessionId ? sessions.get(activeSessionId) : null;
+
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const session = sessions.get(activeSessionId);
+    if (session) return;
+    useBridgeStore.getState().setActiveSessionId(null);
+  }, [sessions, activeSessionId]);
+
+  useEffect(() => {
+    if (activeSessionId) return;
+    const first = sessions.values().next();
+    if (first.done) return;
+    useBridgeStore.getState().setActiveSessionId(first.value.id);
+  }, [sessions, activeSessionId]);
 
   return (
     <div style={styles.container}>
-      <SessionSidebar onNewSession={() => {}} />
+      <SessionSidebar onNewSession={() => setShowNewDialog(true)} />
       <div style={styles.main}>
         {!activeSession ? (
           <div style={styles.empty}>
@@ -23,6 +41,9 @@ export default function SessionsView() {
           </>
         )}
       </div>
+      {showNewDialog && (
+        <NewSessionDialog onClose={() => setShowNewDialog(false)} />
+      )}
     </div>
   );
 }
