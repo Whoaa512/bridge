@@ -5,6 +5,7 @@ import SessionSidebar from "./sessions/SessionSidebar";
 import ChatArea from "./sessions/ChatArea";
 import Composer from "./sessions/Composer";
 import NewSessionDialog from "./sessions/NewSessionDialog";
+import ExtensionDialog from "./sessions/ExtensionDialog";
 
 export default function SessionsView() {
   const activeSessionId = useBridgeStore((s) => s.activeSessionId);
@@ -64,6 +65,7 @@ export default function SessionsView() {
       {showNewDialog && (
         <NewSessionDialog onClose={() => setShowNewDialog(false)} />
       )}
+      <ExtensionDialog />
     </div>
   );
 }
