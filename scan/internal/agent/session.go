@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os/exec"
 	"sync"
 	"syscall"
@@ -67,6 +68,36 @@ func NewSessionManager(onEvent func(string, json.RawMessage), manifestPath strin
 		piBinary: "pi",
 		manifest: NewManifest(manifestPath),
 	}
+}
+
+type RecoveryResult struct {
+	ID        string
+	Recovered bool
+	Error     string
+}
+
+func (m *SessionManager) RecoverSessions() []RecoveryResult {
+	entries, err := m.manifest.Load()
+	if err != nil {
+		log.Printf("manifest load failed: %v", err)
+		return nil
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+
+	results := make([]RecoveryResult, 0, len(entries))
+	for _, e := range entries {
+		_, err := m.Create(e.ID, e.CWD, e.Model, e.ProjectID)
+		if err != nil {
+			log.Printf("recovery failed for session %s: %v", e.ID, err)
+			m.manifest.Remove(e.ID)
+			results = append(results, RecoveryResult{ID: e.ID, Error: err.Error()})
+			continue
+		}
+		results = append(results, RecoveryResult{ID: e.ID, Recovered: true})
+	}
+	return results
 }
 
 func (m *SessionManager) Create(id, cwd, model, projectID string) (*SessionHandle, error) {

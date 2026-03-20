@@ -217,3 +217,65 @@ func TestSessionExitEvent(t *testing.T) {
 		t.Error("expected session_exit event after destroy")
 	}
 }
+
+func TestRecoverSessions(t *testing.T) {
+	script := helperScript(t)
+	manifestPath := filepath.Join(t.TempDir(), "active.json")
+
+	m := NewManifest(manifestPath)
+	cwd := t.TempDir()
+	m.Add(ManifestEntry{ID: "recover-1", CWD: cwd, Model: "model", ProjectID: "proj", CreatedAt: "2024-01-01T00:00:00Z"})
+	m.Add(ManifestEntry{ID: "recover-2", CWD: cwd, Model: "model", ProjectID: "proj", CreatedAt: "2024-01-01T00:01:00Z"})
+
+	sm := NewSessionManager(func(string, json.RawMessage) {}, manifestPath)
+	sm.piBinary = script
+	defer sm.Shutdown()
+
+	results := sm.RecoverSessions()
+	if len(results) != 2 {
+		t.Fatalf("results = %d, want 2", len(results))
+	}
+
+	recovered := 0
+	for _, r := range results {
+		if r.Recovered {
+			recovered++
+		}
+	}
+	if recovered != 2 {
+		t.Errorf("recovered = %d, want 2", recovered)
+	}
+
+	sessions := sm.List()
+	if len(sessions) != 2 {
+		t.Errorf("sessions = %d, want 2", len(sessions))
+	}
+}
+
+func TestRecoverSessionsBadCWD(t *testing.T) {
+	script := helperScript(t)
+	manifestPath := filepath.Join(t.TempDir(), "active.json")
+
+	m := NewManifest(manifestPath)
+	m.Add(ManifestEntry{ID: "bad-1", CWD: "/nonexistent/path/that/does/not/exist", Model: "model", ProjectID: "proj"})
+
+	sm := NewSessionManager(func(string, json.RawMessage) {}, manifestPath)
+	sm.piBinary = script
+	defer sm.Shutdown()
+
+	results := sm.RecoverSessions()
+	if len(results) != 1 {
+		t.Fatalf("results = %d, want 1", len(results))
+	}
+	if results[0].Recovered {
+		t.Error("expected recovery failure for bad cwd")
+	}
+	if results[0].Error == "" {
+		t.Error("expected error message")
+	}
+
+	entries, _ := m.Load()
+	if len(entries) != 0 {
+		t.Errorf("manifest should be empty after failed recovery, got %d", len(entries))
+	}
+}

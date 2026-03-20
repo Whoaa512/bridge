@@ -231,6 +231,16 @@ func runServe() {
 	}, manifestPath)
 	srv.SetSessionManager(sm)
 
+	if results := sm.RecoverSessions(); len(results) > 0 {
+		for _, r := range results {
+			if r.Recovered {
+				fmt.Fprintf(os.Stderr, "Recovered session %s\n", r.ID)
+			} else {
+				fmt.Fprintf(os.Stderr, "Failed to recover session %s: %s\n", r.ID, r.Error)
+			}
+		}
+	}
+
 	cache := watch.NewCache()
 	var w *watch.Watcher
 	w, err = watch.NewWatcher(cache, func(projectPath string) {
