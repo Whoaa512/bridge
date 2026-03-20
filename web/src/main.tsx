@@ -45,7 +45,7 @@ loadSpec((msg) => updateLoading(msg))
     }
   });
 
-connectWS({
+const ws = connectWS({
   onSpec: (spec) => {
     hideEmpty();
     useBridgeStore.getState().setSpec(spec);
@@ -58,3 +58,10 @@ connectWS({
     useBridgeStore.getState().setWsConnected(true);
   },
 });
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    ws.close();
+    handle.destroy();
+  });
+}
