@@ -1,8 +1,6 @@
 package agent
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -67,14 +65,6 @@ func NewSessionManager(onEvent func(string, json.RawMessage)) *SessionManager {
 		onEvent:  onEvent,
 		piBinary: "pi",
 	}
-}
-
-func generateID() (string, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
 }
 
 func (m *SessionManager) Create(id, cwd, model, projectID string) (*SessionHandle, error) {

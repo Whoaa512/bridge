@@ -216,18 +216,3 @@ func TestSessionExitEvent(t *testing.T) {
 		t.Error("expected session_exit event after destroy")
 	}
 }
-
-func TestGenerateID(t *testing.T) {
-	id1, err := generateID()
-	if err != nil {
-		t.Fatalf("generateID: %v", err)
-	}
-	if len(id1) != 32 {
-		t.Errorf("id length = %d, want 32", len(id1))
-	}
-
-	id2, _ := generateID()
-	if id1 == id2 {
-		t.Error("generated duplicate IDs")
-	}
-}
