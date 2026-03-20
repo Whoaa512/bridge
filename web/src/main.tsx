@@ -48,7 +48,9 @@ loadSpec((msg) => updateLoading(msg))
 const ws = connectWS({
   onSpec: (spec) => {
     hideEmpty();
-    useBridgeStore.getState().setSpec(spec);
+    const store = useBridgeStore.getState();
+    store.setSpec(spec);
+    store.setWsConnected(true);
     handle.updateSpec(spec);
   },
   onDisconnect: () => {
