@@ -143,6 +143,12 @@ func (m *SessionManager) readLoop(h *SessionHandle) {
 			h.State = SessionIdle
 			h.mu.Unlock()
 
+			m.mu.Lock()
+			delete(m.sessions, h.ID)
+			m.mu.Unlock()
+
+			h.process.Wait()
+
 			exitEvent, _ := json.Marshal(map[string]string{
 				"type":      "session_exit",
 				"sessionId": h.ID,
