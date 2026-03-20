@@ -189,6 +189,14 @@ func runServe() {
 	srv.SetSpec(s)
 
 	sm := agent.NewSessionManager(func(sessionID string, data json.RawMessage) {
+		var env struct{ Type string `json:"type"` }
+		json.Unmarshal(data, &env)
+
+		if env.Type == "session_exit" || env.Type == "session_error" {
+			srv.Broadcast(data)
+			return
+		}
+
 		kind := agent.ClassifyOutput(data)
 		var wrapped []byte
 		var merr error

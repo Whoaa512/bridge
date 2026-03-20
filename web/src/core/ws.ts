@@ -9,6 +9,7 @@ export interface WSCallbacks {
   onReconnect: () => void;
   onSessionCreated?: (session: SessionInfo) => void;
   onSessionDestroyed?: (sessionId: string) => void;
+  onSessionExit?: (sessionId: string) => void;
   onSessionError?: (sessionId: string, error: string) => void;
   onSessionsList?: (sessions: SessionInfo[]) => void;
   onPiEvent?: (sessionId: string, event: AgentEvent) => void;
@@ -48,6 +49,9 @@ export function connectWS(callbacks: WSCallbacks): WSHandle {
         break;
       case "session_destroyed":
         callbacks.onSessionDestroyed?.(msg.sessionId);
+        break;
+      case "session_exit":
+        callbacks.onSessionExit?.(msg.sessionId);
         break;
       case "session_error":
         callbacks.onSessionError?.(msg.sessionId, msg.error);

@@ -82,8 +82,11 @@ const ws: WSHandle = connectWS({
   onSessionDestroyed: (sessionId) => {
     useBridgeStore.getState().removeSession(sessionId);
   },
-  onSessionError: (sessionId) => {
+  onSessionExit: (sessionId) => {
     useBridgeStore.getState().removeSession(sessionId);
+  },
+  onSessionError: (sessionId, error) => {
+    console.warn(`session ${sessionId} error: ${error}`);
   },
   onSessionsList: (sessions) => {
     useBridgeStore.getState().setSessions(sessions);

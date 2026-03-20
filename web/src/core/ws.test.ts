@@ -64,6 +64,7 @@ function makeCallbacks() {
     onReconnect: mock(() => {}),
     onSessionCreated: mock(() => {}),
     onSessionDestroyed: mock(() => {}),
+    onSessionExit: mock(() => {}),
     onSessionError: mock(() => {}),
     onSessionsList: mock(() => {}),
     onPiEvent: mock(() => {}),
@@ -181,6 +182,19 @@ describe("connectWS", () => {
 
     expect(cb.onSessionDestroyed).toHaveBeenCalledTimes(1);
     expect((cb.onSessionDestroyed!.mock.calls[0] as any[])[0]).toBe("s1");
+    handle.close();
+  });
+
+  test("routes session_exit to onSessionExit", () => {
+    const cb = makeCallbacks();
+    const handle = connectWS(cb);
+    const ws = MockWebSocket.instances[0];
+    ws.simulateOpen();
+
+    ws.simulateMessage({ type: "session_exit", sessionId: "s1" });
+
+    expect(cb.onSessionExit).toHaveBeenCalledTimes(1);
+    expect((cb.onSessionExit!.mock.calls[0] as any[])[0]).toBe("s1");
     handle.close();
   });
 
