@@ -34,6 +34,16 @@
       #ui-root > * {
         pointer-events: auto;
       }
+      @keyframes blink {
+        50% { opacity: 0; }
+      }
+      .bridge-markdown p { margin: 0 0 8px; }
+      .bridge-markdown p:last-child { margin-bottom: 0; }
+      .bridge-markdown pre { background: #161b22; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
+      .bridge-markdown code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; }
+      .bridge-markdown :not(pre) > code { background: #161b22; padding: 2px 6px; border-radius: 4px; }
+      .bridge-markdown ul, .bridge-markdown ol { padding-left: 20px; margin: 4px 0; }
+      .bridge-markdown a { color: #58a6ff; }
     </style>
   </head>
   <body>

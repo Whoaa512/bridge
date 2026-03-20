@@ -1,5 +1,6 @@
 import { useBridgeStore } from "../store";
 import SessionSidebar from "./sessions/SessionSidebar";
+import ChatArea from "./sessions/ChatArea";
 
 export default function SessionsView() {
   const activeSessionId = useBridgeStore((s) => s.activeSessionId);
@@ -15,9 +16,7 @@ export default function SessionsView() {
             No active sessions. Create one to start.
           </div>
         ) : (
-          <div style={styles.placeholder}>
-            Chat area for {activeSessionId}
-          </div>
+          <ChatArea session={activeSession} />
         )}
       </div>
     </div>
@@ -38,14 +37,6 @@ const styles = {
     minWidth: 0,
   },
   empty: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    height: "100%",
-    color: "#8b949e",
-    fontSize: 14,
-  },
-  placeholder: {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
