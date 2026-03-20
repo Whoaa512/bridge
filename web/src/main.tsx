@@ -1,10 +1,11 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import { initCanvas } from "./canvas/bridge";
-import { connectWS } from "./core/ws";
+import { connectWS, type WSHandle } from "./core/ws";
 import { loadSpec } from "./core/loader";
 import { showLoading, hideLoading, updateLoading, showEmpty, hideEmpty } from "./ui";
 import { useBridgeStore, type View } from "./store";
+import type { AgentEvent } from "./agent/types";
 
 const CANVAS_VIEWS: Set<View> = new Set(["complexity", "colony"]);
 
@@ -45,7 +46,15 @@ loadSpec((msg) => updateLoading(msg))
     }
   });
 
-const ws = connectWS({
+function sessionStateFromEvent(event: AgentEvent): "idle" | "streaming" | "compacting" | null {
+  switch (event.type) {
+    case "agent_start": return "streaming";
+    case "agent_end": return "idle";
+    default: return null;
+  }
+}
+
+const ws: WSHandle = connectWS({
   onSpec: (spec) => {
     hideEmpty();
     const store = useBridgeStore.getState();
@@ -59,7 +68,27 @@ const ws = connectWS({
   onReconnect: () => {
     useBridgeStore.getState().setWsConnected(true);
   },
+  onSessionCreated: (session) => {
+    useBridgeStore.getState().addSession(session);
+  },
+  onSessionDestroyed: (sessionId) => {
+    useBridgeStore.getState().removeSession(sessionId);
+  },
+  onSessionError: (sessionId) => {
+    useBridgeStore.getState().removeSession(sessionId);
+  },
+  onSessionsList: (sessions) => {
+    useBridgeStore.getState().setSessions(sessions);
+  },
+  onPiEvent: (sessionId, event) => {
+    const newState = sessionStateFromEvent(event);
+    if (newState) {
+      useBridgeStore.getState().updateSessionState(sessionId, newState);
+    }
+  },
 });
+
+export { ws };
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
