@@ -25,23 +25,26 @@ Why RPC over embedded SDK (OpenClaw-style):
 - Process isolation. A crashed pi session doesn't take down Bridge.
 - Pi's RPC protocol is already feature-complete: prompt, steer, follow_up, abort, get_state, get_messages, set_model, compact, bash, etc.
 
-We vendor pi's RPC types + JSONL parser into Bridge (not the full RpcClient class — we reimplement the thin relay in our sidecar). Integration tests validate vendored types against fresh pi-mono builds.
+We vendor pi's RPC types into Bridge in two forms:
+- **Go structs** in `scan/agent/` — for the Go server to parse/emit RPC JSON lines
+- **TypeScript interfaces** in `web/src/agent/types.ts` — for the browser to type WS payloads (agent events, tool calls, etc.)
+
+Both are derived from pi-mono's `modes/rpc/rpc-types.ts` + `agent-events.ts`. Integration tests validate vendored types against fresh pi-mono builds.
 
 ### Session Tracking: Active Run Map
 
-Inspired by OpenClaw's `runs.ts`, the sidecar maintains:
+The Go server manages sessions directly (no separate sidecar process):
 
-```typescript
-type SessionHandle = {
-  process: ChildProcess;
-  cwd: string;
-  projectId: string;
-  state: "idle" | "streaming" | "compacting";
-  abort: () => void;
-  queueMessage: (text: string) => void;
-};
+```go
+type SessionHandle struct {
+    Process   *exec.Cmd
+    Stdin     io.WriteCloser
+    Cwd       string
+    ProjectID string
+    State     string // "idle" | "streaming" | "compacting"
+}
 
-const sessions = new Map<string, SessionHandle>();
+var sessions = map[string]*SessionHandle{}
 ```
 
 `projectId` maps to the project's `id` field in bridge-spec.json. When creating a session, the browser sends `projectId` alongside `cwd` so the Sessions view can show "pi session against treeline" without reverse-lookups.
@@ -51,26 +54,29 @@ Features:
 - Abort running sessions
 - Track streaming/idle/compacting state per session
 - Clean up on process crash
-- Waiters for drain on sidecar shutdown
+- Waiters for drain on shutdown
 - **Extension UI relay**: Forward pi's `extension_ui_request` events to browser, relay user responses back
 
 ### WebSocket: Single Multiplexed Connection
 
-One WebSocket from browser → Go server. Go proxies agent messages to/from Node sidecar internally.
+One WebSocket from browser → Go server. Go manages everything directly.
 
 ```
-Browser ←──WS──→ Go Server (:7400) ←──internal──→ Node Sidecar
+Browser ←──WS──→ Go Server (:7400)
                      │
               /ws endpoint
               multiplexes:
               - spec events (full_sync, project_update)
               - agent events (pi_event, pi_response, session_*)
+              
+              Go spawns pi child processes directly,
+              relays JSON lines ↔ WS messages
 ```
 
 Why single WS:
 - Simpler for browser (one connection, one reconnect handler)
 - Go already has WebSocket infrastructure
-- Internal communication (Go ↔ Node) can use unix socket or HTTP
+- No separate sidecar process — Go manages pi children directly
 
 Protocol:
 
@@ -79,7 +85,7 @@ Protocol:
 {"type": "full_sync", "spec": {...}}
 {"type": "project_update", "id": "...", "data": {...}}
 
-// Agent commands (browser → server → sidecar)
+// Agent commands (browser → server)
 {"type": "session_create", "id": "req_1", "cwd": "/path", "model": "sonnet", "projectId": "treeline"}
 {"type": "session_destroy", "id": "req_2", "sessionId": "abc123"}
 {"type": "sessions_list_request", "id": "req_3"}
@@ -89,7 +95,7 @@ Protocol:
 {"type": "pi_command", "sessionId": "abc123", "command": {"type": "abort"}}
 {"type": "extension_ui_response", "sessionId": "abc123", "requestId": "ext_1", "response": {...}}
 
-// Agent events (sidecar → server → browser)
+// Agent events (server → browser)
 {"type": "session_created", "id": "req_1", "sessionId": "abc123"}
 {"type": "session_destroyed", "id": "req_2"}
 {"type": "session_error", "sessionId": "abc123", "code": "process_crashed" | "invalid_cwd" | "spawn_failed", "error": "..."}
@@ -98,62 +104,57 @@ Protocol:
 {"type": "sessions_list", "id": "req_3", "sessions": [{...}]}
 {"type": "extension_ui_request", "sessionId": "abc123", "requestId": "ext_1", "uiType": "select" | "confirm" | "input" | "editor", "data": {...}}
 
-// Sidecar lifecycle events
-{"type": "sidecar_status", "status": "healthy" | "restarting"}
-{"type": "sidecar_restarting", "sessions": ["abc123", "def456"]}
-{"type": "session_recovered", "sessionId": "abc123"}
-{"type": "session_lost", "sessionId": "abc123", "reason": "..."}
+// Server lifecycle events
+{"type": "server_status", "agentReady": true}
 ```
 
 **Message semantics when streaming**: The UI presents both options to the user:
 - **Steer** (interrupt): `pi_command` with `{"type": "steer"}` — injects into the active stream immediately
-- **Follow-up** (after): `pi_command` with `{"type": "follow_up"}` — queued by sidecar, sent after current stream completes
+- **Follow-up** (after): `pi_command` with `{"type": "follow_up"}` — queued by Go server, sent after current stream completes
 
 The composer shows a toggle or modifier key (e.g., Shift+Enter = steer, Enter = queue follow-up) so the user decides intent per-message.
 
-### Go ↔ Node Sidecar Communication
+### Session Management in Go
 
-Go spawns Node sidecar as child process, monitors health, restarts on crash.
+Go server manages pi sessions directly — no separate sidecar process.
 
-**Wire format**: JSON lines over unix socket at `~/.bridge/agent.sock`. Same framing as pi RPC — newline-delimited JSON. Go connects as client, sidecar listens.
+- `bridge serve` starts the Go server which handles HTTP, WS, scanning, AND agent sessions
+- Session creation: Go spawns `pi --mode rpc` as child process, pipes stdin/stdout as JSON lines
+- Session state tracked in memory via `map[string]*SessionHandle`
+- Process crash handling: detect child process exit, emit `session_error`, cleanup map
+- Session manifest: write `~/.bridge/sessions/active.json` on session create/destroy (for crash recovery)
+- Drain/shutdown: SIGTERM children, wait for active sessions
+- Pi API keys: pi child processes inherit env from `bridge serve`
 
-Why unix socket: No port conflicts, fast, Go's `net.Dial("unix", ...)` is trivial. JSON lines keeps it consistent with pi's own protocol — one parser pattern everywhere.
-
-**Session ID ownership**: Go server generates session IDs. Browser sends `session_create` request, Go mints a UUID, forwards to sidecar with the ID already assigned, returns `session_created` to browser. Central authority avoids race conditions.
-
-**Health check**: Go sends `{"type": "ping"}` every 5s over the unix socket. Sidecar responds `{"type": "pong"}`. 3 missed pongs = restart. Health state surfaced to browser via `{"type": "sidecar_status", "status": "healthy" | "restarting"}`.
-
-### Sidecar Launch
-
-`bridge serve` starts both:
-1. Go HTTP/WS server on `:7400` (scanner + web + spec broadcast)
-2. Spawns Node sidecar as child process
-3. Monitors sidecar health (ping/pong over unix socket, 5s interval)
-4. Restarts sidecar on crash (exponential backoff)
-5. Forwards SIGTERM/SIGINT to sidecar for clean shutdown
-
-**Crash recovery**: When sidecar crashes, all pi child processes die with it. On restart, sidecar reads `~/.bridge/sessions/` manifest to discover sessions that were active. For each, it respawns `pi --mode rpc` and resumes. Browser receives `{"type": "sidecar_restarting", "sessions": [...]}` immediately, then `{"type": "session_recovered", "sessionId": "..."}` for each successfully resumed session, or `{"type": "session_lost", "sessionId": "..."}` for any that couldn't be recovered. UI shows a toast/banner during recovery.
+Why no sidecar:
+- Go is excellent at child process management (`exec.Command`)
+- Single binary, single process — drastically simpler ops
+- No unix socket, no health checks, no crash recovery for sidecar itself
+- JSON lines parsing in Go is trivial (`bufio.Scanner` + `json.Unmarshal`)
 
 ### Pi Import: Vendored Types + Integration Tests
 
-Vendor into `agent/vendor/pi/`:
-- `rpc-types.ts` — command/response/event type definitions
-- `jsonl.ts` — JSON lines parser
-- `agent-events.ts` — AgentEvent type definitions (from pi-agent-core)
+**Go types** in `scan/agent/pitypes/`:
+- Go structs mirroring pi's RPC command/response/event types
+- JSON lines reader/writer
 
-**Not vendored**: RpcClient class. We write our own thin process manager since we need different lifecycle semantics (multi-session, WS relay, crash recovery).
+**Browser types** in `web/src/agent/types.ts`:
+- TypeScript interfaces for `AgentEvent`, `RpcResponse`, etc.
+- Used by Sessions view to type and render WS payloads
 
-**Pi session persistence**: Let pi persist sessions normally (default behavior). This gives us free resume capability later. Configurable via `~/.bridge/config.json`:
+**Not vendored**: RpcClient class. Go implements its own thin process manager since it needs different lifecycle semantics (multi-session, WS relay).
+
+**Pi session persistence**: Let pi persist sessions normally (default behavior). Configurable via `~/.bridge/config.json`:
 - `sessionPersist: true` (default) — pi uses its default session directory
 - `sessionPersist: false` — pass `--no-session` to pi
 - `sessionDir: "/custom/path"` — pass `--session-dir` to pi
 
-The sidecar also maintains a lightweight manifest at `~/.bridge/sessions/active.json` mapping session IDs → cwd/model/pi-session-id, used for crash recovery.
+The Go server also maintains a lightweight manifest at `~/.bridge/sessions/active.json` mapping session IDs → cwd/model/pi-session-id, used for crash recovery.
 
 Integration test strategy:
-- `agent/test/pi-compat.test.ts` — builds pi-mono from configurable path (default: `~/code/pi-mono`), spawns `pi --mode rpc`, validates our vendored types match actual protocol
-- Env var `PI_MONO_PATH` overrides pi-mono location
-- Runs as part of `bun test` but skipped if pi-mono not found (CI-friendly)
+- `scan/agent/pitypes/compat_test.go` — spawns `pi --mode rpc`, validates Go structs match actual protocol
+- Env var `PI_MONO_PATH` overrides pi-mono location (default: `~/code/pi-mono`)
+- Skipped if pi binary not found (CI-friendly)
 
 ## Web UI Architecture
 
@@ -188,13 +189,13 @@ React owns `#app` root. Canvas overlays on top for treemap views.
 
 **web/** (new deps):
 - `react`, `react-dom` — UI framework
-- `react-markdown` — agent response rendering
+- `react-markdown` — agent response rendering (Phase 3)
 - `zustand` — state management
 
-**agent/** (new package):
-- Bun runtime
-- `ws` or Bun built-in WS (for unix socket listener)
-- Vendored pi types
+**scan/agent/** (new Go package):
+- Pi RPC type definitions (Go structs)
+- Session manager (process spawning, JSON lines relay)
+- JSON lines reader/writer
 
 ## Implementation Phases
 
@@ -233,28 +234,40 @@ React owns `#app` root. Canvas overlays on top for treemap views.
 
 **Ships**: Working tab navigation, treemap unchanged.
 
-### Phase 2: Node Agent Sidecar
+### Phase 2a: Go Session Manager + Bidirectional WS
 
-**Goal**: Node process managing pi sessions, connected to Go server.
+**Goal**: Go server can spawn pi sessions, relay commands/events over WS.
 
-**Prerequisite from Phase 1**: `connectWS` in `web/src/core/ws.ts` is currently read-only (only parses `full_sync`). Phase 2 must add a `send(msg)` method to the WS handle so the browser can send `session_create`, `pi_command`, etc. The zustand store will also need `sidecarStatus: 'healthy' | 'restarting'` for health monitoring.
+**Prerequisite from Phase 1**: `connectWS` in `web/src/core/ws.ts` is currently read-only (only parses `full_sync`). This phase adds a `send(msg)` method to the WS handle so the browser can send `session_create`, `pi_command`, etc.
 
-1. Create `agent/` at repo root
-2. Bun project with vendored pi types
-3. Session manager: `Map<string, SessionHandle>`
-4. Spawn `pi --mode rpc` per session, relay JSON lines
-5. Unix socket listener at `~/.bridge/agent.sock`, JSON lines wire format
-6. Handle: session_create, session_destroy, pi_command, sessions_list_request
-7. Forward pi events back through Go → browser
-8. **Go WS handler becomes bidirectional**: parse incoming JSON commands, route agent commands to sidecar (current wsReadPump is no-op — this is the migration)
-9. Go generates session IDs (UUID) for session_create before forwarding to sidecar
-10. Process crash handling: emit session_error with structured error code, cleanup map
-11. Session manifest: write `~/.bridge/sessions/active.json` on session create/destroy
-12. Drain/shutdown: wait for active sessions, SIGTERM children
-13. Go server: spawn sidecar, connect to unix socket, proxy WS messages
-14. Health check: ping/pong over unix socket, 5s interval, 3 misses = restart
+1. Define Go RPC types in `scan/agent/pitypes/` mirroring pi's `rpc-types.ts`
+2. JSON lines reader/writer for Go (stdin/stdout pipe to pi child process)
+3. Session manager: `map[string]*SessionHandle` with spawn/destroy/send
+4. Spawn `pi --mode rpc` per session, relay JSON lines to/from process
+5. **Make Go WS handler bidirectional**: parse incoming JSON commands from browser, route agent commands to session manager
+6. Go generates session IDs (UUID) for `session_create`
+7. Handle: `session_create`, `session_destroy`, `pi_command`, `sessions_list_request`
+8. Forward pi events back to browser as `pi_event` WS messages
+9. Vendor pi's TS event types into `web/src/agent/types.ts` for browser use
+10. Add `send()` method to `connectWS` return value in `web/src/core/ws.ts`
+11. Add zustand store fields for sessions
+12. Process crash handling: detect child exit, emit `session_error`, cleanup map
+13. Integration test: spawn `pi --mode rpc`, validate Go types match protocol
 
 **Ships**: Programmatic pi session creation/destruction from browser.
+
+### Phase 2b: Session Lifecycle + Resilience
+
+**Goal**: Production-grade session management.
+
+1. Session manifest: write `~/.bridge/sessions/active.json` on create/destroy
+2. Crash recovery on server restart: read manifest, attempt to resume sessions
+3. Drain/shutdown: SIGTERM children, wait for active sessions, timeout
+4. Graceful handling of pi process OOM/crash mid-stream
+5. Session timeout: configurable idle timeout, cleanup stale sessions
+6. Stress test: multiple concurrent sessions, rapid create/destroy
+
+**Ships**: Resilient session management that survives restarts.
 
 ### Phase 3: Sessions View + Chat
 
@@ -272,7 +285,6 @@ React owns `#app` root. Canvas overlays on top for treemap views.
 10. State indicator: model name, thinking level, idle/streaming
 11. Multiple sessions: switch between active sessions in sidebar
 12. **Extension UI dialogs**: Render pi's extension_ui_request as modal overlays (select, confirm, input, editor). Relay user response back via extension_ui_response.
-13. Sidecar status: toast/banner when sidecar is restarting, per-session recovery feedback
 
 **Ships**: Functional agent chat from Bridge with full extension support.
 
@@ -286,7 +298,7 @@ React owns `#app` root. Canvas overlays on top for treemap views.
    - Stats bar (projects, branches, PRs, active agents)
    - Project cards with branches, PRs, agent status
 3. Search + filter pills (All, Has PRs, Active Agents, Stale)
-4. Pi session status from sidecar (sessions_list query)
+4. Pi session status from Go server (sessions_list query)
 5. Click project card → start session against it
 
 **Ships**: Full workspace awareness, branch-dashboard replaced.
@@ -307,7 +319,7 @@ After Phase 3:
 - [ ] Abort running agent
 - [ ] Multiple simultaneous sessions
 - [ ] Treemap works exactly as before
-- [ ] `bridge serve` starts scanner + web + agent sidecar
+- [ ] `bridge serve` starts scanner + web + agent session manager
 
 After Phase 4:
 - [ ] Workspace view shows branches, PRs, agent status
@@ -318,7 +330,7 @@ After Phase 4:
 
 - Diff panel (future)
 - Git operations from Bridge (future)
-- Session history / resume UI (future — pi persists sessions to disk, recovery is automatic on sidecar crash)
+- Session history / resume UI (future — pi persists sessions to disk, recovery is handled on server restart)
 - Sound effects (M4b per original plan)
 - Embedded pi SDK (RPC is sufficient for now)
 - Custom tool injection (pi's default tools are fine)
@@ -334,18 +346,22 @@ After Phase 4:
 | Session tracking | Active run map with handles | Need queue/abort/state per session (OpenClaw pattern) |
 | WebSocket | Single multiplexed | Simpler for browser, Go proxies internally |
 | Pi import | Vendor types + integration tests | Decoupled, testable against fresh pi builds |
-| Sidecar launch | Go spawns Node child | Single `bridge serve` command, health monitoring |
-| Go ↔ Node wire format | JSON lines over unix socket (`~/.bridge/agent.sock`) | Consistent with pi RPC, no port conflicts |
+| Sidecar launch | ~~Go spawns Node child~~ → Go-native, no sidecar | Single binary, no unix socket/health checks. Drastically simpler. |
+| Go ↔ Node wire format | ~~JSON lines over unix socket~~ → N/A, all in-process | No sidecar means no IPC needed |
 | Session ID ownership | Go server generates UUID | Central authority, avoids race conditions |
 | Queue semantics | User chooses: steer (interrupt) vs follow_up (queue) | Both are valid intents — let user decide per-message |
 | Max sessions | No limit | Single-user tool, trust the user |
 | Extension UI | Relay to browser as modal dialogs | Proper support, extensions work correctly |
 | Pi session persistence | Persist by default, configurable off | Free resume later, `~/.bridge/config.json` controls it |
-| Sidecar crash recovery | Respawn + attempt session recovery from manifest | Maximize continuity, surface status to user |
+| ~~Sidecar crash recovery~~ | N/A — no sidecar. Pi child crash = session_error + cleanup | Single process model, pi crashes are per-session |
+| Session management runtime | Go-native (no Node/Bun sidecar) | Single binary, Go is great at child procs, no IPC overhead |
+| Pi types vendoring | Go structs in scan/ + TS interfaces in web/ | Both sides need types; Go for server, TS for browser rendering |
+| Phase 2 split | 2a (core session CRUD + WS) then 2b (resilience) | Manageable scope per phase |
+| Colony vs Complexity | Differentiate now: Colony = all projects, Complexity = filtered | Avoid confusing duplicate views |
 | Home view / Colony as nav | 4 equal tabs, home configurable later | Colony nav hub is long-term, not MVP |
 | Fractal zoom | Long-term vision, not MVP | Core to thesis but defer until nav/chat/workspace solid |
 | Web framework | React via Vite | Panel views need component model, canvas stays vanilla |
-| Pi API keys | Sidecar inherits env from `bridge serve` | Simplest, no separate auth config |
+| Pi API keys | Pi child processes inherit env from `bridge serve` | Simplest, no separate auth config |
 | URL routing | Hand-rolled pushState, no react-router | 19 lines, no dep, sufficient for 4 views |
 | Event listener cleanup | AbortController signal on all listeners | Single `abort()` tears down everything |
 | Canvas data flow | `main.tsx` owns HTTP + WS, bridges to canvas | Eliminates race between HTTP fetch and WS updates |
