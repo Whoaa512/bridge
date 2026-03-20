@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { Project } from "../../core/types";
 import type { SessionInfo } from "../../agent/ws-types";
 import { relativeTime } from "./time-utils";
@@ -6,6 +6,7 @@ import { relativeTime } from "./time-utils";
 interface Props {
   project: Project;
   sessions?: SessionInfo[];
+  onClick?: () => void;
 }
 
 const KIND_LABELS: Record<string, string> = {
@@ -21,8 +22,9 @@ function injectPulseKeyframe() {
   document.head.appendChild(style);
 }
 
-export default function ProjectCard({ project, sessions }: Props) {
+export default function ProjectCard({ project, sessions, onClick }: Props) {
   useEffect(injectPulseKeyframe, []);
+  const [hovered, setHovered] = useState(false);
 
   const isStale = (project.activity?.staleDays ?? 0) > 14;
   const uncommitted = project.git?.uncommitted ?? 0;
@@ -38,7 +40,16 @@ export default function ProjectCard({ project, sessions }: Props) {
   const kindLabel = KIND_LABELS[project.kind];
 
   return (
-    <div style={{ ...styles.card, ...(isStale ? styles.stale : {}) }}>
+    <div
+      style={{
+        ...styles.card,
+        ...(isStale ? styles.stale : {}),
+        ...(hovered ? styles.hovered : {}),
+      }}
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       <div style={styles.header}>
         <div style={styles.nameRow}>
           <span style={styles.name}>{project.name}</span>
@@ -82,6 +93,11 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     gap: 6,
+    cursor: "pointer",
+    transition: "border-color 150ms ease",
+  },
+  hovered: {
+    borderColor: "#58a6ff",
   },
   stale: {
     opacity: 0.5,

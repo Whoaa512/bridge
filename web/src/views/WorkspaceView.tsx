@@ -1,7 +1,10 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useBridgeStore } from "../store";
 import { filterProjects, DEFAULT_FILTER } from "../core/filter";
 import type { SessionInfo } from "../agent/ws-types";
+import type { Project } from "../core/types";
+import { sendSessionCreate } from "../agent/commands";
+import { pushView } from "../router";
 import AttentionBar, { computeAttentionItems } from "./workspace/AttentionBar";
 import StatsBar from "./workspace/StatsBar";
 import SearchFilter from "./workspace/SearchFilter";
@@ -25,6 +28,19 @@ export default function WorkspaceView() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<WorkspaceFilter>("all");
+
+  const handleCardClick = useCallback((project: Project, projectSessions?: SessionInfo[]) => {
+    const store = useBridgeStore.getState();
+
+    if (projectSessions && projectSessions.length > 0) {
+      store.setActiveSessionId(projectSessions[0].id);
+    } else {
+      sendSessionCreate(project.path, project.id);
+    }
+
+    store.setActiveView("sessions");
+    pushView("sessions");
+  }, []);
 
   if (!spec) {
     return <div style={styles.empty}>Loading workspace…</div>;
@@ -55,9 +71,17 @@ export default function WorkspaceView() {
         onFilterChange={setActiveFilter}
       />
       <div style={styles.grid}>
-        {filtered.map((p) => (
-          <ProjectCard key={p.id} project={p} sessions={sessionsByProject.get(p.id)} />
-        ))}
+        {filtered.map((p) => {
+          const ps = sessionsByProject.get(p.id);
+          return (
+            <ProjectCard
+              key={p.id}
+              project={p}
+              sessions={ps}
+              onClick={() => handleCardClick(p, ps)}
+            />
+          );
+        })}
       </div>
     </div>
   );
