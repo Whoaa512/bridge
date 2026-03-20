@@ -198,30 +198,46 @@ React owns `#app` root. Canvas overlays on top for treemap views.
 
 ## Implementation Phases
 
-### Phase 1: React Shell + View System
+### Phase 1: React Shell + View System ✅
 
 **Goal**: Tab bar, view routing, existing treemap preserved.
 
-1. Add React + react-dom to web/
-2. Configure Vite for TSX + add WS proxy rule (`/ws` → `ws://localhost:7400/ws` in vite.config.ts)
-3. `App.tsx` with tab bar (`1-4` keyboard shortcuts)
-4. URL routing: `/` Complexity, `/workspace` Workspace, `/colony` Colony, `/sessions` Sessions
-5. Canvas visibility toggled by view
-6. Refactor main.ts into imperative canvas module:
-   - Extract `initCanvas(el: HTMLCanvasElement): CanvasHandle`
-   - `CanvasHandle` exposes: `destroy()`, `setVisible(bool)`, `updateSpec(spec)`
-   - Render loop stays in vanilla TS, React calls init/destroy via `useEffect`
-   - Zustand store holds spec + WS connection; canvas subscribes to store updates
-   - Camera/hover/drag state stays internal to canvas module (not in zustand)
-7. Placeholder content for Workspace/Sessions
+**Status**: Complete (12 commits, 90 tests, 0 lint errors)
 
-**Migration note**: Current `main.ts` (~250 lines) is tightly coupled — state, event listeners, WS callbacks, canvas init all interleaved. The refactor extracts canvas lifecycle into `web/src/canvas/bridge.ts` as an imperative module. React doesn't own the render loop — it just mounts/unmounts the canvas.
+1. ✅ Add React + react-dom + zustand to web/
+2. ✅ Configure Vite for TSX + WS proxy (`/ws` → `ws://localhost:7400/ws`)
+3. ✅ `App.tsx` with tab bar (`1-4` keyboard shortcuts)
+4. ✅ URL routing: `/` Complexity, `/workspace` Workspace, `/colony` Colony, `/sessions` Sessions
+5. ✅ Canvas visibility toggled by view
+6. ✅ Refactor main.ts into imperative canvas module:
+   - `initCanvas(el: HTMLCanvasElement): CanvasHandle` in `web/src/canvas/bridge.ts`
+   - `CanvasHandle` exposes: `destroy()`, `setVisible(bool)`, `updateSpec(spec)`
+   - Render loop stays in vanilla TS, `main.tsx` calls init + wires to store
+   - Zustand store holds spec + WS connection; `main.tsx` bridges store → canvas
+   - Camera/hover/drag state stays internal to canvas module (not in zustand)
+7. ✅ Placeholder content for Workspace/Sessions
+
+**Implementation decisions made during Phase 1:**
+
+- **No react-router**: Hand-rolled 19-line router (`router.ts`) using `pushState`/`popstate`. Minimal, no deps.
+- **AbortController for cleanup**: All canvas event listeners use a single AbortController signal. `destroy()` calls `abort()` — one call cleans everything.
+- **Data flow**: `main.tsx` owns initial `loadSpec()` + WS connection. Pushes to both zustand store and canvas handle. Eliminated a data race where bridge.ts was doing its own HTTP fetch that could be overwritten by WS.
+- **HMR cleanup**: `import.meta.hot.dispose()` tears down WS + canvas on hot reload.
+- **Complexity = Colony (for now)**: Both canvas views render the same treemap. Colony distinction deferred to Phase 4.
+- **Render loop always runs**: Starts on `initCanvas()`, renders empty frame until `updateSpec()` provides data. Simpler than conditional start.
+
+**Known tech debt to address later:**
+- Drawer (`ui/drawer.ts`) is vanilla DOM — writes to `#ui-root`. Could conflict with React panels if opened on non-canvas views. Needs either React migration or guard to canvas-only views.
+- `showError`/`showLoading`/`showEmpty` are also vanilla DOM in `main.tsx`. Should move to React store-driven rendering eventually.
+- Keyboard handlers: bridge.ts registers WASD/arrows on `window`, App.tsx registers 1-4. No conflict today but fragile if more shortcuts added.
 
 **Ships**: Working tab navigation, treemap unchanged.
 
 ### Phase 2: Node Agent Sidecar
 
 **Goal**: Node process managing pi sessions, connected to Go server.
+
+**Prerequisite from Phase 1**: `connectWS` in `web/src/core/ws.ts` is currently read-only (only parses `full_sync`). Phase 2 must add a `send(msg)` method to the WS handle so the browser can send `session_create`, `pi_command`, etc. The zustand store will also need `sidecarStatus: 'healthy' | 'restarting'` for health monitoring.
 
 1. Create `agent/` at repo root
 2. Bun project with vendored pi types
@@ -330,3 +346,7 @@ After Phase 4:
 | Fractal zoom | Long-term vision, not MVP | Core to thesis but defer until nav/chat/workspace solid |
 | Web framework | React via Vite | Panel views need component model, canvas stays vanilla |
 | Pi API keys | Sidecar inherits env from `bridge serve` | Simplest, no separate auth config |
+| URL routing | Hand-rolled pushState, no react-router | 19 lines, no dep, sufficient for 4 views |
+| Event listener cleanup | AbortController signal on all listeners | Single `abort()` tears down everything |
+| Canvas data flow | `main.tsx` owns HTTP + WS, bridges to canvas | Eliminates race between HTTP fetch and WS updates |
+| Canvas render loop | Always running, renders empty until spec arrives | Simpler than conditional start/stop |
