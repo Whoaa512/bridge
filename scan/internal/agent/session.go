@@ -57,13 +57,15 @@ type SessionManager struct {
 	sessions map[string]*SessionHandle
 	onEvent  func(sessionID string, data json.RawMessage)
 	piBinary string
+	manifest *Manifest
 }
 
-func NewSessionManager(onEvent func(string, json.RawMessage)) *SessionManager {
+func NewSessionManager(onEvent func(string, json.RawMessage), manifestPath string) *SessionManager {
 	return &SessionManager{
 		sessions: make(map[string]*SessionHandle),
 		onEvent:  onEvent,
 		piBinary: "pi",
+		manifest: NewManifest(manifestPath),
 	}
 }
 
@@ -109,6 +111,14 @@ func (m *SessionManager) Create(id, cwd, model, projectID string) (*SessionHandl
 	m.sessions[id] = handle
 	m.mu.Unlock()
 
+	m.manifest.Add(ManifestEntry{
+		ID:        id,
+		CWD:       cwd,
+		Model:     model,
+		ProjectID: projectID,
+		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+	})
+
 	go m.readLoop(handle)
 
 	return handle, nil
@@ -138,6 +148,8 @@ func (m *SessionManager) readLoop(h *SessionHandle) {
 			m.mu.Unlock()
 
 			h.process.Wait()
+
+			m.manifest.Remove(h.ID)
 
 			exitEvent, _ := json.Marshal(map[string]string{
 				"type":      "session_exit",
@@ -217,6 +229,7 @@ func (m *SessionManager) Destroy(id string) error {
 	}
 	<-h.done
 	h.process.Wait()
+	m.manifest.Remove(id)
 	return nil
 }
 

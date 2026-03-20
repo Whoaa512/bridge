@@ -36,11 +36,12 @@ func testManager(t *testing.T, script string) *SessionManager {
 	var mu sync.Mutex
 	events := make([]json.RawMessage, 0)
 
+	manifestPath := filepath.Join(t.TempDir(), "active.json")
 	sm := NewSessionManager(func(sessionID string, data json.RawMessage) {
 		mu.Lock()
 		events = append(events, data)
 		mu.Unlock()
-	})
+	}, manifestPath)
 	sm.piBinary = script
 	return sm
 }
@@ -100,7 +101,7 @@ func TestSessionSendEcho(t *testing.T) {
 		mu.Lock()
 		events = append(events, data)
 		mu.Unlock()
-	})
+	}, filepath.Join(t.TempDir(), "active.json"))
 	sm.piBinary = script
 	defer sm.Shutdown()
 
@@ -137,7 +138,7 @@ func TestSessionSendEcho(t *testing.T) {
 }
 
 func TestSessionSendNotFound(t *testing.T) {
-	sm := NewSessionManager(func(string, json.RawMessage) {})
+	sm := NewSessionManager(func(string, json.RawMessage) {}, filepath.Join(t.TempDir(), "active.json"))
 	err := sm.Send("nonexistent", json.RawMessage(`{}`))
 	if err == nil {
 		t.Error("expected error for nonexistent session")
@@ -163,7 +164,7 @@ func TestSessionDestroy(t *testing.T) {
 }
 
 func TestSessionDestroyNotFound(t *testing.T) {
-	sm := NewSessionManager(func(string, json.RawMessage) {})
+	sm := NewSessionManager(func(string, json.RawMessage) {}, filepath.Join(t.TempDir(), "active.json"))
 	if err := sm.Destroy("nonexistent"); err == nil {
 		t.Error("expected error for nonexistent session")
 	}
@@ -193,7 +194,7 @@ func TestSessionExitEvent(t *testing.T) {
 		mu.Lock()
 		events = append(events, data)
 		mu.Unlock()
-	})
+	}, filepath.Join(t.TempDir(), "active.json"))
 	sm.piBinary = script
 	defer sm.Shutdown()
 

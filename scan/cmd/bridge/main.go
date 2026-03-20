@@ -188,6 +188,9 @@ func runServe() {
 	srv := server.New(port, opts...)
 	srv.SetSpec(s)
 
+	home, _ := os.UserHomeDir()
+	manifestPath := filepath.Join(home, ".bridge", "sessions", "active.json")
+
 	sm := agent.NewSessionManager(func(sessionID string, data json.RawMessage) {
 		var env struct{ Type string `json:"type"` }
 		json.Unmarshal(data, &env)
@@ -225,7 +228,7 @@ func runServe() {
 			return
 		}
 		srv.Broadcast(wrapped)
-	})
+	}, manifestPath)
 	srv.SetSessionManager(sm)
 
 	cache := watch.NewCache()
