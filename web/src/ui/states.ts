@@ -59,6 +59,12 @@ export function showLoading() {
   getRoot().appendChild(div);
 }
 
+export function updateLoading(msg: string) {
+  const el = document.getElementById(LOADING_ID);
+  const p = el?.querySelector(".pulse");
+  if (p) p.textContent = msg;
+}
+
 export function hideLoading() {
   document.getElementById(LOADING_ID)?.remove();
 }

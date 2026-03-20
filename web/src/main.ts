@@ -19,7 +19,7 @@ import {
   zoomAtPoint,
   contentBounds,
 } from "./canvas";
-import { showDrawer, hideDrawer, showLoading, hideLoading, showEmpty, hideEmpty } from "./ui";
+import { showDrawer, hideDrawer, showLoading, hideLoading, updateLoading, showEmpty, hideEmpty } from "./ui";
 
 const LERP_SPEED = 0.15;
 const FOCUS_ZOOM = 2.0;
@@ -160,7 +160,7 @@ async function main() {
 
   let spec: BridgeSpec;
   try {
-    spec = await loadSpec();
+    spec = await loadSpec((msg) => updateLoading(msg));
   } catch (err) {
     hideLoading();
     showError(`Failed to connect to Bridge scanner. Is \`bridge serve\` running?\n\n${err}`);

@@ -31,18 +31,26 @@ describe("loadSpec", () => {
     expect(spec.machine.hostname).toBe("test");
   });
 
-  test("throws on fetch error (non-200)", async () => {
-    mockFetch.mockResolvedValue(new Response("Not Found", { status: 404, statusText: "Not Found" }));
-    expect(loadSpec()).rejects.toThrow("Failed to fetch spec: 404 Not Found");
+  test("retries on failure then succeeds", async () => {
+    let calls = 0;
+    mockFetch.mockImplementation(() => {
+      calls++;
+      if (calls < 3) return Promise.reject(new Error("ECONNREFUSED"));
+      return Promise.resolve(new Response(JSON.stringify(mockSpec), { status: 200 }));
+    });
+    const statuses: string[] = [];
+    const spec = await loadSpec((msg) => statuses.push(msg));
+    expect(spec.version).toBe("1");
+    expect(calls).toBe(3);
+    expect(statuses.length).toBe(2);
   });
 
-  test("throws on network error", async () => {
-    mockFetch.mockRejectedValue(new Error("Network failure"));
-    expect(loadSpec()).rejects.toThrow("Network failure");
-  });
-
-  test("throws on empty/null response", async () => {
-    mockFetch.mockResolvedValue(new Response("null", { status: 200 }));
-    expect(loadSpec()).rejects.toThrow("Empty response from scanner");
+  test("calls onStatus with attempt info", async () => {
+    mockFetch
+      .mockRejectedValueOnce(new Error("ECONNREFUSED"))
+      .mockResolvedValueOnce(new Response(JSON.stringify(mockSpec), { status: 200 }));
+    const statuses: string[] = [];
+    await loadSpec((msg) => statuses.push(msg));
+    expect(statuses[0]).toContain("attempt 1");
   });
 });
