@@ -56,7 +56,8 @@ func (m *Manifest) Load() ([]ManifestEntry, error) {
 
 	var entries []ManifestEntry
 	if err := json.Unmarshal(data, &entries); err != nil {
-		return nil, err
+		os.Remove(m.path)
+		return nil, nil
 	}
 
 	m.entries = make(map[string]ManifestEntry, len(entries))

@@ -265,8 +265,6 @@ func (m *SessionManager) Destroy(id string) error {
 		}
 	}
 	<-h.done
-	h.process.Wait()
-	m.manifest.Remove(id)
 	return nil
 }
 
@@ -301,7 +299,6 @@ func (m *SessionManager) Shutdown() {
 				h.process.Process.Kill()
 			}
 			<-h.done
-			h.process.Wait()
 		}(h)
 	}
 
