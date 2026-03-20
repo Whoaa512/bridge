@@ -8,6 +8,8 @@ import (
 	"io"
 	"os/exec"
 	"sync"
+	"syscall"
+	"time"
 )
 
 type SessionState string
@@ -205,7 +207,12 @@ func (m *SessionManager) Destroy(id string) error {
 	m.mu.Unlock()
 
 	if h.process.Process != nil {
-		h.process.Process.Kill()
+		h.process.Process.Signal(syscall.SIGTERM)
+		select {
+		case <-h.done:
+		case <-time.After(5 * time.Second):
+			h.process.Process.Kill()
+		}
 	}
 	<-h.done
 	h.process.Wait()
