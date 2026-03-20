@@ -234,25 +234,33 @@ React owns `#app` root. Canvas overlays on top for treemap views.
 
 **Ships**: Working tab navigation, treemap unchanged.
 
-### Phase 2a: Go Session Manager + Bidirectional WS
+### Phase 2a: Go Session Manager + Bidirectional WS ✅
 
 **Goal**: Go server can spawn pi sessions, relay commands/events over WS.
 
-**Prerequisite from Phase 1**: `connectWS` in `web/src/core/ws.ts` is currently read-only (only parses `full_sync`). This phase adds a `send(msg)` method to the WS handle so the browser can send `session_create`, `pi_command`, etc.
+**Status**: Complete (16 commits, 106 web tests, all Go tests passing)
 
-1. Define Go RPC types in `scan/agent/pitypes/` mirroring pi's `rpc-types.ts`
-2. JSON lines reader/writer for Go (stdin/stdout pipe to pi child process)
-3. Session manager: `map[string]*SessionHandle` with spawn/destroy/send
-4. Spawn `pi --mode rpc` per session, relay JSON lines to/from process
-5. **Make Go WS handler bidirectional**: parse incoming JSON commands from browser, route agent commands to session manager
-6. Go generates session IDs (UUID) for `session_create`
-7. Handle: `session_create`, `session_destroy`, `pi_command`, `sessions_list_request`
-8. Forward pi events back to browser as `pi_event` WS messages
-9. Vendor pi's TS event types into `web/src/agent/types.ts` for browser use
-10. Add `send()` method to `connectWS` return value in `web/src/core/ws.ts`
-11. Add zustand store fields for sessions
-12. Process crash handling: detect child exit, emit `session_error`, cleanup map
-13. Integration test: spawn `pi --mode rpc`, validate Go types match protocol
+1. ✅ Go RPC types in `scan/internal/agent/types.go` + JSONL reader/writer (`jsonl.go`)
+2. ✅ Session manager (`session.go`): spawn `pi --mode rpc`, relay JSON lines, lifecycle management
+3. ✅ Bidirectional WS handler: routes session_create/destroy/list/pi_command/extension_ui_response
+4. ✅ Go generates session IDs (crypto/rand UUID)
+5. ✅ Pi events forwarded as typed envelopes: `pi_event`, `pi_response`, `extension_ui_request`
+6. ✅ Synthetic bridge events: `session_exit`, `session_error` broadcast at top level (not wrapped as pi_event)
+7. ✅ Vendored pi TS types in `web/src/agent/types.ts` + Bridge WS types in `ws-types.ts`
+8. ✅ WS `send()` method + typed callback routing for all event types
+9. ✅ Zustand store tracks sessions (`Map<string, SessionInfo>`) with CRUD
+10. ✅ WS→store wiring: session lifecycle + agent_start/end state tracking
+11. ✅ Colony vs Complexity differentiation: Colony shows all projects, Complexity filters monorepo children
+12. ✅ Pi RPC compat integration test (skips if pi not on PATH)
+
+**Implementation decisions made during Phase 2a:**
+
+- **`json.RawMessage` for polymorphic pass-through**: Go doesn't deeply parse every pi event — it classifies by `type` field and relays raw JSON. Browser TS types handle rendering.
+- **ClassifyOutput**: Simple function that checks `type` field — "response" → pi_response, "extension_ui_request" → extension_ui_request, "session_exit"/"session_error" → bridge event, else → pi_event.
+- **Graceful shutdown**: `Destroy()` sends SIGTERM → 5s wait → SIGKILL fallback. `readLoop` calls `Wait()` to reap zombies.
+- **Auto-remove dead sessions**: When `readLoop` exits (process dies), session is removed from map automatically. `Send()` checks done-channel before writing.
+- **Session IDs owned by Go server**: `generateSessionID()` in server.go, not session manager.
+- **Broadcast to all WS clients**: Pi events for all sessions go to all connected browsers. Fine for single-user tool.
 
 **Ships**: Programmatic pi session creation/destruction from browser.
 
@@ -366,3 +374,8 @@ After Phase 4:
 | Event listener cleanup | AbortController signal on all listeners | Single `abort()` tears down everything |
 | Canvas data flow | `main.tsx` owns HTTP + WS, bridges to canvas | Eliminates race between HTTP fetch and WS updates |
 | Canvas render loop | Always running, renders empty until spec arrives | Simpler than conditional start/stop |
+| Go event relay | `json.RawMessage` pass-through, classify by type field | Go doesn't need to parse every pi event type |
+| Session shutdown | SIGTERM → 5s → SIGKILL, readLoop calls Wait() | Graceful cleanup, no zombie processes |
+| Dead session cleanup | Auto-remove from map when readLoop exits | Prevents writes to dead processes, clean state |
+| Bridge synthetic events | `session_exit`/`session_error` are top-level WS events | Distinct from pi_event so frontend can handle separately |
+| Session event broadcast | All pi events broadcast to all WS clients | Single-user tool, simplicity over targeting |
