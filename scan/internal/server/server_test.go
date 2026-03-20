@@ -368,3 +368,132 @@ func TestWSBroadcastOnSetSpec(t *testing.T) {
 		t.Errorf("projects = %d, want 2", len(parsed.Projects))
 	}
 }
+
+func readWSMsg(t *testing.T, conn *websocket.Conn) map[string]interface{} {
+	t.Helper()
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, raw, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("read ws: %v", err)
+	}
+	var msg map[string]interface{}
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		t.Fatalf("unmarshal ws msg: %v", err)
+	}
+	return msg
+}
+
+func sendWSMsg(t *testing.T, conn *websocket.Conn, v interface{}) {
+	t.Helper()
+	data, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+}
+
+func TestWSSessionsListNoManager(t *testing.T) {
+	srv := New(0)
+	srv.SetSpec(testSpec())
+	conn := wsConnect(t, srv)
+
+	readWSMsg(t, conn)
+
+	sendWSMsg(t, conn, map[string]string{"type": "sessions_list_request"})
+	msg := readWSMsg(t, conn)
+
+	if msg["type"] != "sessions_list" {
+		t.Errorf("type = %v, want sessions_list", msg["type"])
+	}
+	sessions := msg["sessions"].([]interface{})
+	if len(sessions) != 0 {
+		t.Errorf("sessions = %d, want 0", len(sessions))
+	}
+}
+
+func TestWSSessionCreateNoManager(t *testing.T) {
+	srv := New(0)
+	srv.SetSpec(testSpec())
+	conn := wsConnect(t, srv)
+
+	readWSMsg(t, conn)
+
+	sendWSMsg(t, conn, map[string]string{
+		"type": "session_create",
+		"cwd":  "/tmp",
+	})
+	msg := readWSMsg(t, conn)
+
+	if msg["type"] != "error" {
+		t.Errorf("type = %v, want error", msg["type"])
+	}
+}
+
+func TestWSSessionDestroyNoManager(t *testing.T) {
+	srv := New(0)
+	srv.SetSpec(testSpec())
+	conn := wsConnect(t, srv)
+
+	readWSMsg(t, conn)
+
+	sendWSMsg(t, conn, map[string]string{
+		"type":      "session_destroy",
+		"sessionId": "nonexistent",
+	})
+	msg := readWSMsg(t, conn)
+
+	if msg["type"] != "error" {
+		t.Errorf("type = %v, want error", msg["type"])
+	}
+}
+
+func TestWSBroadcast(t *testing.T) {
+	srv := New(0)
+	srv.SetSpec(testSpec())
+
+	conn := wsConnect(t, srv)
+	readWSMsg(t, conn)
+
+	payload, _ := json.Marshal(map[string]string{
+		"type":      "pi_event",
+		"sessionId": "test-123",
+	})
+	srv.Broadcast(payload)
+
+	msg := readWSMsg(t, conn)
+	if msg["type"] != "pi_event" {
+		t.Errorf("type = %v, want pi_event", msg["type"])
+	}
+	if msg["sessionId"] != "test-123" {
+		t.Errorf("sessionId = %v", msg["sessionId"])
+	}
+}
+
+func TestWSUnknownMessageType(t *testing.T) {
+	srv := New(0)
+	srv.SetSpec(testSpec())
+	conn := wsConnect(t, srv)
+
+	readWSMsg(t, conn)
+
+	sendWSMsg(t, conn, map[string]string{"type": "totally_unknown"})
+
+	time.Sleep(100 * time.Millisecond)
+}
+
+func TestWSInvalidJSON(t *testing.T) {
+	srv := New(0)
+	srv.SetSpec(testSpec())
+	conn := wsConnect(t, srv)
+
+	readWSMsg(t, conn)
+
+	conn.WriteMessage(websocket.TextMessage, []byte("not json"))
+	msg := readWSMsg(t, conn)
+
+	if msg["type"] != "error" {
+		t.Errorf("type = %v, want error", msg["type"])
+	}
+}

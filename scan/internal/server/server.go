@@ -1,6 +1,8 @@
 package server
 
 import (
+	cryptoRand "crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -13,9 +15,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cjwinslow/bridge/scan/internal/agent"
 	"github.com/cjwinslow/bridge/scan/internal/spec"
 	"github.com/gorilla/websocket"
 )
+
+var hexEncode = hex.EncodeToString
 
 type wsClient struct {
 	conn *websocket.Conn
@@ -32,6 +37,8 @@ type Server struct {
 
 	wsMu    sync.Mutex
 	clients []*wsClient
+
+	sessions *agent.SessionManager
 }
 
 var upgrader = websocket.Upgrader{
@@ -68,6 +75,10 @@ type Option func(*Server)
 
 func WithWebDir(dir string) Option {
 	return func(s *Server) { s.webDir = dir }
+}
+
+func WithSessionManager(sm *agent.SessionManager) Option {
+	return func(s *Server) { s.sessions = sm }
 }
 
 func isLocalOrigin(origin string) bool {
@@ -215,10 +226,192 @@ func (s *Server) wsReadPump(c *wsClient) {
 	})
 
 	for {
-		if _, _, err := c.conn.ReadMessage(); err != nil {
+		_, raw, err := c.conn.ReadMessage()
+		if err != nil {
 			return
 		}
+		s.handleWSMessage(c, raw)
 	}
+}
+
+type wsEnvelope struct {
+	Type string `json:"type"`
+}
+
+func (s *Server) handleWSMessage(c *wsClient, raw []byte) {
+	var env wsEnvelope
+	if err := json.Unmarshal(raw, &env); err != nil {
+		sendToClient(c, map[string]string{"type": "error", "error": "invalid json"})
+		return
+	}
+
+	switch env.Type {
+	case "session_create":
+		s.handleSessionCreate(c, raw)
+	case "session_destroy":
+		s.handleSessionDestroy(c, raw)
+	case "sessions_list_request":
+		s.handleSessionsList(c)
+	case "pi_command":
+		s.handlePiCommand(c, raw)
+	case "extension_ui_response":
+		s.handleExtensionUIResponse(c, raw)
+	}
+}
+
+func (s *Server) handleSessionCreate(c *wsClient, raw []byte) {
+	var req struct {
+		CWD       string `json:"cwd"`
+		Model     string `json:"model"`
+		ProjectID string `json:"projectId"`
+	}
+	if err := json.Unmarshal(raw, &req); err != nil {
+		sendToClient(c, map[string]string{"type": "error", "error": "invalid session_create"})
+		return
+	}
+
+	if s.sessions == nil {
+		sendToClient(c, map[string]string{"type": "error", "error": "session manager not available"})
+		return
+	}
+
+	id, err := generateSessionID()
+	if err != nil {
+		sendToClient(c, map[string]string{"type": "error", "error": "failed to generate session id"})
+		return
+	}
+
+	h, err := s.sessions.Create(id, req.CWD, req.Model, req.ProjectID)
+	if err != nil {
+		sendToClient(c, map[string]interface{}{
+			"type":  "error",
+			"error": fmt.Sprintf("create session: %v", err),
+		})
+		return
+	}
+
+	sendToClient(c, map[string]interface{}{
+		"type":    "session_created",
+		"session": h.Info(),
+	})
+}
+
+func (s *Server) handleSessionDestroy(c *wsClient, raw []byte) {
+	var req struct {
+		SessionID string `json:"sessionId"`
+	}
+	if err := json.Unmarshal(raw, &req); err != nil {
+		sendToClient(c, map[string]string{"type": "error", "error": "invalid session_destroy"})
+		return
+	}
+
+	if s.sessions == nil {
+		sendToClient(c, map[string]string{"type": "error", "error": "session manager not available"})
+		return
+	}
+
+	if err := s.sessions.Destroy(req.SessionID); err != nil {
+		sendToClient(c, map[string]interface{}{
+			"type":  "error",
+			"error": fmt.Sprintf("destroy session: %v", err),
+		})
+		return
+	}
+
+	sendToClient(c, map[string]interface{}{
+		"type":      "session_destroyed",
+		"sessionId": req.SessionID,
+	})
+}
+
+func (s *Server) handleSessionsList(c *wsClient) {
+	if s.sessions == nil {
+		sendToClient(c, map[string]interface{}{
+			"type":     "sessions_list",
+			"sessions": []interface{}{},
+		})
+		return
+	}
+
+	sendToClient(c, map[string]interface{}{
+		"type":     "sessions_list",
+		"sessions": s.sessions.List(),
+	})
+}
+
+func (s *Server) handlePiCommand(c *wsClient, raw []byte) {
+	var req struct {
+		SessionID string          `json:"sessionId"`
+		Command   json.RawMessage `json:"command"`
+	}
+	if err := json.Unmarshal(raw, &req); err != nil {
+		sendToClient(c, map[string]string{"type": "error", "error": "invalid pi_command"})
+		return
+	}
+
+	if s.sessions == nil {
+		sendToClient(c, map[string]string{"type": "error", "error": "session manager not available"})
+		return
+	}
+
+	if err := s.sessions.Send(req.SessionID, req.Command); err != nil {
+		sendToClient(c, map[string]interface{}{
+			"type":  "error",
+			"error": fmt.Sprintf("send to session: %v", err),
+		})
+	}
+}
+
+func (s *Server) handleExtensionUIResponse(c *wsClient, raw []byte) {
+	var req struct {
+		SessionID string          `json:"sessionId"`
+		Response  json.RawMessage `json:"response"`
+	}
+	if err := json.Unmarshal(raw, &req); err != nil {
+		sendToClient(c, map[string]string{"type": "error", "error": "invalid extension_ui_response"})
+		return
+	}
+
+	if s.sessions == nil {
+		return
+	}
+
+	s.sessions.Send(req.SessionID, req.Response)
+}
+
+func (s *Server) Broadcast(msg []byte) {
+	s.wsMu.Lock()
+	defer s.wsMu.Unlock()
+
+	live := s.clients[:0]
+	for _, c := range s.clients {
+		select {
+		case c.send <- msg:
+			live = append(live, c)
+		default:
+			c.conn.Close()
+		}
+	}
+	s.clients = live
+}
+
+func sendToClient(c *wsClient, v interface{}) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return
+	}
+	select {
+	case c.send <- data:
+	default:
+	}
+}
+
+func generateSessionID() (string, error) {
+	b := make([]byte, 16)
+	if _, err := cryptoRand.Read(b); err != nil {
+		return "", err
+	}
+	return hexEncode(b), nil
 }
 
 func (s *Server) removeClient(c *wsClient) {
