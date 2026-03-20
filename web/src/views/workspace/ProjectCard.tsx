@@ -1,11 +1,29 @@
+import { useEffect } from "react";
 import type { Project } from "../../core/types";
+import type { SessionInfo } from "../../agent/ws-types";
 import { relativeTime } from "./time-utils";
 
 interface Props {
   project: Project;
+  sessions?: SessionInfo[];
 }
 
-export default function ProjectCard({ project }: Props) {
+const KIND_LABELS: Record<string, string> = {
+  monorepo_child: "child",
+  directory: "dir",
+};
+
+function injectPulseKeyframe() {
+  if (document.getElementById("agent-pulse-css")) return;
+  const style = document.createElement("style");
+  style.id = "agent-pulse-css";
+  style.textContent = `@keyframes agent-pulse { 0%,100%{opacity:.4} 50%{opacity:1} }`;
+  document.head.appendChild(style);
+}
+
+export default function ProjectCard({ project, sessions }: Props) {
+  useEffect(injectPulseKeyframe, []);
+
   const isStale = (project.activity?.staleDays ?? 0) > 14;
   const uncommitted = project.git?.uncommitted ?? 0;
   const prCount = project.prs.length;
@@ -15,10 +33,17 @@ export default function ProjectCard({ project }: Props) {
       ? relativeTime(project.git.lastCommit)
       : "unknown";
 
+  const hasAgents = sessions && sessions.length > 0;
+  const isStreaming = hasAgents && sessions.some((s) => s.state === "streaming");
+  const kindLabel = KIND_LABELS[project.kind];
+
   return (
     <div style={{ ...styles.card, ...(isStale ? styles.stale : {}) }}>
       <div style={styles.header}>
-        <span style={styles.name}>{project.name}</span>
+        <div style={styles.nameRow}>
+          <span style={styles.name}>{project.name}</span>
+          {kindLabel && <span style={styles.kindPill}>{kindLabel}</span>}
+        </div>
         {uncommitted > 0 && (
           <span style={styles.uncommittedBadge}>{uncommitted}</span>
         )}
@@ -27,6 +52,18 @@ export default function ProjectCard({ project }: Props) {
         {project.git?.branch ?? "—"}
       </div>
       <div style={styles.footer}>
+        {hasAgents && (
+          <span style={styles.agentBadge}>
+            <span
+              style={{
+                ...styles.agentDot,
+                background: isStreaming ? "#58a6ff" : "#39d353",
+                ...(isStreaming ? { animation: "agent-pulse 1.5s ease-in-out infinite" } : {}),
+              }}
+            />
+            {sessions.length} agent{sessions.length > 1 ? "s" : ""}
+          </span>
+        )}
         {prCount > 0 && (
           <span style={styles.prBadge}>{prCount} PR{prCount > 1 ? "s" : ""}</span>
         )}
@@ -54,12 +91,28 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     justifyContent: "space-between",
   },
+  nameRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    overflow: "hidden",
+    minWidth: 0,
+  },
   name: {
     color: "#c9d1d9",
     fontWeight: 600,
     fontSize: 14,
     overflow: "hidden",
     textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  kindPill: {
+    color: "#8b949e",
+    fontSize: 10,
+    padding: "1px 5px",
+    border: "1px solid #30363d",
+    borderRadius: 4,
+    flexShrink: 0,
     whiteSpace: "nowrap",
   },
   uncommittedBadge: {
@@ -83,6 +136,20 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: 8,
     marginTop: 2,
+  },
+  agentBadge: {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+    color: "#39d353",
+    fontSize: 11,
+    fontWeight: 500,
+  },
+  agentDot: {
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    flexShrink: 0,
   },
   prBadge: {
     background: "rgba(56, 139, 253, 0.15)",

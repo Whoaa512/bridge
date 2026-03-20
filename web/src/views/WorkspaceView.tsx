@@ -1,5 +1,7 @@
+import { useMemo } from "react";
 import { useBridgeStore } from "../store";
 import { filterProjects, DEFAULT_FILTER } from "../core/filter";
+import type { SessionInfo } from "../agent/ws-types";
 import AttentionBar, { computeAttentionItems } from "./workspace/AttentionBar";
 import StatsBar from "./workspace/StatsBar";
 import ProjectCard from "./workspace/ProjectCard";
@@ -7,6 +9,17 @@ import ProjectCard from "./workspace/ProjectCard";
 export default function WorkspaceView() {
   const spec = useBridgeStore((s) => s.spec);
   const sessions = useBridgeStore((s) => s.sessions);
+
+  const sessionsByProject = useMemo(() => {
+    const map = new Map<string, SessionInfo[]>();
+    for (const s of sessions.values()) {
+      if (!s.projectId) continue;
+      const list = map.get(s.projectId) ?? [];
+      list.push(s);
+      map.set(s.projectId, list);
+    }
+    return map;
+  }, [sessions]);
 
   if (!spec) {
     return <div style={styles.empty}>Loading workspace…</div>;
@@ -30,7 +43,7 @@ export default function WorkspaceView() {
       />
       <div style={styles.grid}>
         {projects.map((p) => (
-          <ProjectCard key={p.id} project={p} />
+          <ProjectCard key={p.id} project={p} sessions={sessionsByProject.get(p.id)} />
         ))}
       </div>
     </div>
