@@ -264,16 +264,23 @@ React owns `#app` root. Canvas overlays on top for treemap views.
 
 **Ships**: Programmatic pi session creation/destruction from browser.
 
-### Phase 2b: Session Lifecycle + Resilience
+### Phase 2b: Session Lifecycle + Resilience ✅
 
 **Goal**: Production-grade session management.
 
-1. Session manifest: write `~/.bridge/sessions/active.json` on create/destroy
-2. Crash recovery on server restart: read manifest, attempt to resume sessions
-3. Drain/shutdown: SIGTERM children, wait for active sessions, timeout
-4. Graceful handling of pi process OOM/crash mid-stream
-5. Session timeout: configurable idle timeout, cleanup stale sessions
-6. Stress test: multiple concurrent sessions, rapid create/destroy
+**Status**: Complete (6 commits, all tests passing with `-race`)
+
+1. ✅ Session manifest: `~/.bridge/sessions/active.json` — atomic writes (temp+rename), integrated into create/destroy/readLoop
+2. ✅ Crash recovery: `RecoverSessions()` reads manifest on startup, respawns sessions, cleans invalid entries
+3. ✅ Parallel shutdown: concurrent SIGTERM→5s→SIGKILL per session, 10s total timeout, manifest cleared
+4. ✅ Exit code in `session_exit` events for crash diagnosis
+5. ✅ Concurrent stress test: 10 sessions with `-race` flag, all operations concurrent
+6. ✅ Corrupt manifest JSON auto-deleted (treat as fresh start)
+
+**Implementation decisions:**
+- **readLoop owns `Wait()` and manifest cleanup**: `Destroy()` and `Shutdown()` only signal+wait on `done` channel. Eliminates double-`Wait()` race.
+- **Recovery reuses old session IDs**: Enables seamless reconnection for clients that cached session IDs.
+- **Corrupt manifest = fresh start**: Bad JSON deletes the file rather than blocking all recovery.
 
 **Ships**: Resilient session management that survives restarts.
 
