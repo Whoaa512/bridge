@@ -96,6 +96,15 @@ func (w *Watcher) loop() {
 }
 
 func (w *Watcher) handleEvent(event fsnotify.Event) {
+	if event.Op == fsnotify.Chmod {
+		return
+	}
+
+	base := filepath.Base(event.Name)
+	if isNoisyGitFile(base) {
+		return
+	}
+
 	dir := filepath.Dir(event.Name)
 
 	w.mu.Lock()
@@ -115,8 +124,23 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 		}
 	}
 
-	log.Printf("[watch] %s %s → project %s", event.Op, filepath.Base(event.Name), filepath.Base(projectPath))
+	log.Printf("[watch] %s %s → project %s", event.Op, base, filepath.Base(projectPath))
 	w.pending[projectPath] = time.Now()
+}
+
+func isNoisyGitFile(name string) bool {
+	switch name {
+	case "fsmonitor--daemon.ipc",
+		"index.lock",
+		"gc.log",
+		"gc.log.lock",
+		"FETCH_HEAD.lock",
+		"FETCH_HEAD",
+		"config.lock",
+		"shallow.lock":
+		return true
+	}
+	return false
 }
 
 func (w *Watcher) suppressed() bool {
