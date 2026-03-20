@@ -2,6 +2,8 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import { initCanvas } from "./canvas/bridge";
 import { connectWS } from "./core/ws";
+import { loadSpec } from "./core/loader";
+import { showLoading, hideLoading, updateLoading, showEmpty, hideEmpty } from "./ui";
 import { useBridgeStore, type View } from "./store";
 
 const CANVAS_VIEWS: Set<View> = new Set(["complexity", "colony"]);
@@ -22,8 +24,30 @@ useBridgeStore.subscribe(
   },
 );
 
+showLoading();
+loadSpec((msg) => updateLoading(msg))
+  .then((spec) => {
+    hideLoading();
+    if (spec.projects.length === 0) {
+      showEmpty();
+    }
+    useBridgeStore.getState().setSpec(spec);
+    handle.updateSpec(spec);
+  })
+  .catch((err) => {
+    hideLoading();
+    const root = document.getElementById("ui-root");
+    if (root) {
+      const div = document.createElement("div");
+      div.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#f85149;font-size:16px;font-family:system-ui;text-align:center;max-width:400px;";
+      div.textContent = `Failed to connect to Bridge scanner. Is \`bridge serve\` running?\n\n${err}`;
+      root.appendChild(div);
+    }
+  });
+
 connectWS({
   onSpec: (spec) => {
+    hideEmpty();
     useBridgeStore.getState().setSpec(spec);
     handle.updateSpec(spec);
   },

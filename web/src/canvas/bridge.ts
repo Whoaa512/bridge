@@ -1,4 +1,3 @@
-import { loadSpec } from "../core/loader";
 import { filterProjects, DEFAULT_FILTER } from "../core/filter";
 import type { BridgeSpec, Project } from "../core/types";
 import type { Rect, TreemapNode } from "../layout/treemap";
@@ -20,7 +19,7 @@ import {
   keyToDirection,
   panCamera,
 } from "./index";
-import { showDrawer, hideDrawer, showLoading, hideLoading, updateLoading, showEmpty, hideEmpty } from "../ui";
+import { showDrawer, hideDrawer } from "../ui";
 
 const LERP_SPEED = 0.15;
 const FOCUS_ZOOM = 2.0;
@@ -117,15 +116,6 @@ function initStateFromSpec(state: State, spec: BridgeSpec) {
   const cam = fitCamera(state.layout.nodes, state.viewport);
   state.camera = cam;
   state.targetCamera = cam;
-}
-
-function showError(message: string) {
-  const root = document.getElementById("ui-root");
-  if (!root) return;
-  const div = document.createElement("div");
-  div.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#f85149;font-size:16px;font-family:system-ui;text-align:center;max-width:400px;";
-  div.textContent = message;
-  root.appendChild(div);
 }
 
 export function initCanvas(canvas: HTMLCanvasElement): CanvasHandle {
@@ -299,26 +289,7 @@ export function initCanvas(canvas: HTMLCanvasElement): CanvasHandle {
     requestAnimationFrame(frame);
   }
 
-  showLoading();
-  loadSpec((msg) => updateLoading(msg))
-    .then((spec) => {
-      hideLoading();
-      if (state.destroyed) return;
-
-      if (spec.projects.length === 0) {
-        showEmpty();
-        initStateFromSpec(state, spec);
-        return;
-      }
-
-      initStateFromSpec(state, spec);
-      startRenderLoop();
-    })
-    .catch((err) => {
-      hideLoading();
-      if (state.destroyed) return;
-      showError(`Failed to connect to Bridge scanner. Is \`bridge serve\` running?\n\n${err}`);
-    });
+  startRenderLoop();
 
   return {
     destroy() {
@@ -340,7 +311,6 @@ export function initCanvas(canvas: HTMLCanvasElement): CanvasHandle {
 
       const wasEmpty = !state.spec || state.spec.projects.length === 0;
       if (wasEmpty && spec.projects.length > 0) {
-        hideEmpty();
         initStateFromSpec(state, spec);
         if (state.visible) startRenderLoop();
         return;

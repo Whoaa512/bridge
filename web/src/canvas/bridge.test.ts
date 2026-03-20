@@ -1,19 +1,6 @@
 import { describe, test, expect, beforeEach, mock } from "bun:test";
 import type { BridgeSpec } from "../core/types";
 
-const fetchMock = mock(() => Promise.resolve({
-  ok: true,
-  json: () => Promise.resolve(makeSpec([])),
-}));
-
-const localStorageMock = {
-  store: {} as Record<string, string>,
-  getItem(key: string) { return this.store[key] ?? null; },
-  setItem(key: string, val: string) { this.store[key] = val; },
-  removeItem(key: string) { delete this.store[key]; },
-  clear() { this.store = {}; },
-};
-
 const windowListeners = new Map<string, Set<Function>>();
 
 function mockWindow() {
@@ -22,8 +9,6 @@ function mockWindow() {
   (globalThis as any).innerWidth = 800;
   (globalThis as any).innerHeight = 600;
   (globalThis as any).devicePixelRatio = 1;
-  (globalThis as any).fetch = fetchMock;
-  (globalThis as any).localStorage = localStorageMock;
   (globalThis as any).requestAnimationFrame = mock((cb: any) => {
     setTimeout(() => cb(0), 0);
     return 1;
@@ -59,8 +44,6 @@ function mockWindow() {
 }
 
 beforeEach(() => {
-  localStorageMock.clear();
-  fetchMock.mockClear();
   mockWindow();
 });
 
@@ -122,6 +105,7 @@ function makeCanvas(): HTMLCanvasElement {
       fill: () => {},
       stroke: () => {},
       setTransform: () => {},
+      translate: () => {},
       globalAlpha: 1,
       fillStyle: "",
       strokeStyle: "",
