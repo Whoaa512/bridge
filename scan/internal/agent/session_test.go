@@ -1,0 +1,233 @@
+package agent
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+)
+
+func helperScript(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("test requires unix shell")
+	}
+
+	script := filepath.Join(dir, "fake-pi")
+	content := `#!/bin/sh
+while IFS= read -r line; do
+  echo "$line"
+done
+`
+	if err := os.WriteFile(script, []byte(content), 0755); err != nil {
+		t.Fatalf("write script: %v", err)
+	}
+	return script
+}
+
+func testManager(t *testing.T, script string) *SessionManager {
+	t.Helper()
+	var mu sync.Mutex
+	events := make([]json.RawMessage, 0)
+
+	sm := NewSessionManager(func(sessionID string, data json.RawMessage) {
+		mu.Lock()
+		events = append(events, data)
+		mu.Unlock()
+	})
+	sm.piBinary = script
+	return sm
+}
+
+func TestSessionCreateAndList(t *testing.T) {
+	script := helperScript(t)
+	sm := testManager(t, script)
+	defer sm.Shutdown()
+
+	h, err := sm.Create("sess-1", t.TempDir(), "test-model", "proj-1")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if h.ID != "sess-1" {
+		t.Errorf("id = %q", h.ID)
+	}
+
+	sessions := sm.List()
+	if len(sessions) != 1 {
+		t.Fatalf("sessions = %d, want 1", len(sessions))
+	}
+	if sessions[0].ID != "sess-1" {
+		t.Errorf("session id = %q", sessions[0].ID)
+	}
+	if sessions[0].State != SessionIdle {
+		t.Errorf("state = %q, want idle", sessions[0].State)
+	}
+}
+
+func TestSessionGet(t *testing.T) {
+	script := helperScript(t)
+	sm := testManager(t, script)
+	defer sm.Shutdown()
+
+	sm.Create("sess-1", t.TempDir(), "model", "proj")
+
+	h := sm.Get("sess-1")
+	if h == nil {
+		t.Fatal("get returned nil")
+	}
+	if h.ID != "sess-1" {
+		t.Errorf("id = %q", h.ID)
+	}
+
+	if sm.Get("nonexistent") != nil {
+		t.Error("expected nil for nonexistent session")
+	}
+}
+
+func TestSessionSendEcho(t *testing.T) {
+	script := helperScript(t)
+
+	var mu sync.Mutex
+	var events []json.RawMessage
+
+	sm := NewSessionManager(func(sessionID string, data json.RawMessage) {
+		mu.Lock()
+		events = append(events, data)
+		mu.Unlock()
+	})
+	sm.piBinary = script
+	defer sm.Shutdown()
+
+	sm.Create("sess-1", t.TempDir(), "model", "proj")
+
+	cmd, _ := json.Marshal(map[string]string{"type": "get_state"})
+	if err := sm.Send("sess-1", cmd); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+
+	deadline := time.After(3 * time.Second)
+	for {
+		mu.Lock()
+		n := len(events)
+		mu.Unlock()
+		if n > 0 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timeout waiting for echo event")
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	mu.Lock()
+	first := events[0]
+	mu.Unlock()
+
+	if !strings.Contains(string(first), "get_state") {
+		t.Errorf("expected echoed get_state, got %s", first)
+	}
+}
+
+func TestSessionSendNotFound(t *testing.T) {
+	sm := NewSessionManager(func(string, json.RawMessage) {})
+	err := sm.Send("nonexistent", json.RawMessage(`{}`))
+	if err == nil {
+		t.Error("expected error for nonexistent session")
+	}
+}
+
+func TestSessionDestroy(t *testing.T) {
+	script := helperScript(t)
+	sm := testManager(t, script)
+
+	sm.Create("sess-1", t.TempDir(), "model", "proj")
+
+	if err := sm.Destroy("sess-1"); err != nil {
+		t.Fatalf("destroy: %v", err)
+	}
+
+	if sm.Get("sess-1") != nil {
+		t.Error("session still exists after destroy")
+	}
+	if len(sm.List()) != 0 {
+		t.Error("list not empty after destroy")
+	}
+}
+
+func TestSessionDestroyNotFound(t *testing.T) {
+	sm := NewSessionManager(func(string, json.RawMessage) {})
+	if err := sm.Destroy("nonexistent"); err == nil {
+		t.Error("expected error for nonexistent session")
+	}
+}
+
+func TestSessionShutdown(t *testing.T) {
+	script := helperScript(t)
+	sm := testManager(t, script)
+
+	sm.Create("sess-1", t.TempDir(), "model", "proj")
+	sm.Create("sess-2", t.TempDir(), "model", "proj")
+
+	sm.Shutdown()
+
+	if len(sm.List()) != 0 {
+		t.Errorf("sessions remain after shutdown: %d", len(sm.List()))
+	}
+}
+
+func TestSessionExitEvent(t *testing.T) {
+	script := helperScript(t)
+
+	var mu sync.Mutex
+	var events []json.RawMessage
+
+	sm := NewSessionManager(func(sessionID string, data json.RawMessage) {
+		mu.Lock()
+		events = append(events, data)
+		mu.Unlock()
+	})
+	sm.piBinary = script
+	defer sm.Shutdown()
+
+	sm.Create("sess-1", t.TempDir(), "model", "proj")
+	sm.Destroy("sess-1")
+
+	time.Sleep(100 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	found := false
+	for _, ev := range events {
+		if strings.Contains(string(ev), "session_exit") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected session_exit event after destroy")
+	}
+}
+
+func TestGenerateID(t *testing.T) {
+	id1, err := generateID()
+	if err != nil {
+		t.Fatalf("generateID: %v", err)
+	}
+	if len(id1) != 32 {
+		t.Errorf("id length = %d, want 32", len(id1))
+	}
+
+	id2, _ := generateID()
+	if id1 == id2 {
+		t.Error("generated duplicate IDs")
+	}
+}

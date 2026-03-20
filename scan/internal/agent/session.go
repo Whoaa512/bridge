@@ -1,0 +1,226 @@
+package agent
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os/exec"
+	"sync"
+)
+
+type SessionState string
+
+const (
+	SessionIdle       SessionState = "idle"
+	SessionStreaming   SessionState = "streaming"
+	SessionCompacting SessionState = "compacting"
+)
+
+type SessionInfo struct {
+	ID        string       `json:"id"`
+	CWD       string       `json:"cwd"`
+	ProjectID string       `json:"projectId"`
+	Model     string       `json:"model"`
+	State     SessionState `json:"state"`
+}
+
+type SessionHandle struct {
+	ID        string
+	CWD       string
+	ProjectID string
+	Model     string
+	State     SessionState
+
+	process *exec.Cmd
+	stdin   *JSONLWriter
+	stdout  io.ReadCloser
+	done    chan struct{}
+	mu      sync.Mutex
+}
+
+func (h *SessionHandle) Info() SessionInfo {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return SessionInfo{
+		ID:        h.ID,
+		CWD:       h.CWD,
+		ProjectID: h.ProjectID,
+		Model:     h.Model,
+		State:     h.State,
+	}
+}
+
+type SessionManager struct {
+	mu       sync.RWMutex
+	sessions map[string]*SessionHandle
+	onEvent  func(sessionID string, data json.RawMessage)
+	piBinary string
+}
+
+func NewSessionManager(onEvent func(string, json.RawMessage)) *SessionManager {
+	return &SessionManager{
+		sessions: make(map[string]*SessionHandle),
+		onEvent:  onEvent,
+		piBinary: "pi",
+	}
+}
+
+func generateID() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+func (m *SessionManager) Create(id, cwd, model, projectID string) (*SessionHandle, error) {
+	piPath, err := exec.LookPath(m.piBinary)
+	if err != nil {
+		return nil, fmt.Errorf("pi binary not found: %w", err)
+	}
+
+	cmd := exec.Command(piPath, "--mode", "rpc")
+	cmd.Dir = cwd
+
+	stdinPipe, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, fmt.Errorf("stdin pipe: %w", err)
+	}
+
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		stdinPipe.Close()
+		return nil, fmt.Errorf("stdout pipe: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		stdinPipe.Close()
+		stdoutPipe.Close()
+		return nil, fmt.Errorf("start pi: %w", err)
+	}
+
+	handle := &SessionHandle{
+		ID:        id,
+		CWD:       cwd,
+		ProjectID: projectID,
+		Model:     model,
+		State:     SessionIdle,
+		process:   cmd,
+		stdin:     NewJSONLWriter(stdinPipe),
+		stdout:    stdoutPipe,
+		done:      make(chan struct{}),
+	}
+
+	m.mu.Lock()
+	m.sessions[id] = handle
+	m.mu.Unlock()
+
+	go m.readLoop(handle)
+
+	return handle, nil
+}
+
+func (m *SessionManager) readLoop(h *SessionHandle) {
+	defer close(h.done)
+	reader := NewJSONLReader(h.stdout)
+	for {
+		raw, err := reader.Read()
+		if err != nil {
+			if err != io.EOF {
+				errEvent, _ := json.Marshal(map[string]string{
+					"type":      "session_error",
+					"sessionId": h.ID,
+					"error":     err.Error(),
+				})
+				m.onEvent(h.ID, errEvent)
+			}
+
+			h.mu.Lock()
+			h.State = SessionIdle
+			h.mu.Unlock()
+
+			exitEvent, _ := json.Marshal(map[string]string{
+				"type":      "session_exit",
+				"sessionId": h.ID,
+			})
+			m.onEvent(h.ID, exitEvent)
+			return
+		}
+
+		kind := ClassifyOutput(raw)
+		if kind == "event" {
+			var ev struct{ Type string `json:"type"` }
+			json.Unmarshal(raw, &ev)
+
+			h.mu.Lock()
+			switch ev.Type {
+			case "agent_start":
+				h.State = SessionStreaming
+			case "agent_end":
+				h.State = SessionIdle
+			}
+			h.mu.Unlock()
+		}
+
+		m.onEvent(h.ID, raw)
+	}
+}
+
+func (m *SessionManager) Send(id string, cmd json.RawMessage) error {
+	m.mu.RLock()
+	h, ok := m.sessions[id]
+	m.mu.RUnlock()
+	if !ok {
+		return fmt.Errorf("session %q not found", id)
+	}
+	return h.stdin.Write(cmd)
+}
+
+func (m *SessionManager) Get(id string) *SessionHandle {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.sessions[id]
+}
+
+func (m *SessionManager) List() []SessionInfo {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make([]SessionInfo, 0, len(m.sessions))
+	for _, h := range m.sessions {
+		result = append(result, h.Info())
+	}
+	return result
+}
+
+func (m *SessionManager) Destroy(id string) error {
+	m.mu.Lock()
+	h, ok := m.sessions[id]
+	if !ok {
+		m.mu.Unlock()
+		return fmt.Errorf("session %q not found", id)
+	}
+	delete(m.sessions, id)
+	m.mu.Unlock()
+
+	if h.process.Process != nil {
+		h.process.Process.Kill()
+	}
+	<-h.done
+	h.process.Wait()
+	return nil
+}
+
+func (m *SessionManager) Shutdown() {
+	m.mu.Lock()
+	ids := make([]string, 0, len(m.sessions))
+	for id := range m.sessions {
+		ids = append(ids, id)
+	}
+	m.mu.Unlock()
+
+	for _, id := range ids {
+		m.Destroy(id)
+	}
+}
