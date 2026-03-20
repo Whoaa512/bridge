@@ -1,10 +1,11 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import { initCanvas, type FilterMode } from "./canvas/bridge";
-import { connectWS, type WSHandle } from "./core/ws";
+import { connectWS } from "./core/ws";
 import { loadSpec } from "./core/loader";
 import { showLoading, hideLoading, updateLoading, showEmpty, hideEmpty } from "./ui";
 import { useBridgeStore, type View } from "./store";
+import { setWSHandle } from "./agent/commands";
 import type { AgentEvent } from "./agent/types";
 
 const CANVAS_VIEWS: Set<View> = new Set(["complexity", "colony"]);
@@ -62,7 +63,73 @@ function sessionStateFromEvent(event: AgentEvent): "idle" | "streaming" | "compa
   }
 }
 
-const ws: WSHandle = connectWS({
+function getLastAssistantMessageId(sessionId: string): string | null {
+  const list = useBridgeStore.getState().messages.get(sessionId);
+  if (!list) return null;
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (list[i].role === "assistant") return list[i].id;
+  }
+  return null;
+}
+
+function handlePiEvent(sessionId: string, event: AgentEvent) {
+  const store = useBridgeStore.getState();
+
+  const newState = sessionStateFromEvent(event);
+  if (newState) store.updateSessionState(sessionId, newState);
+
+  switch (event.type) {
+    case "agent_start":
+      store.addMessage(sessionId, {
+        id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        role: "assistant",
+        content: "",
+        timestamp: Date.now(),
+        toolCalls: [],
+        isStreaming: true,
+      });
+      break;
+
+    case "agent_end":
+      store.updateLastMessage(sessionId, (msg) => ({ ...msg, isStreaming: false }));
+      break;
+
+    case "message_update": {
+      const ame = event.assistantMessageEvent;
+      if (ame.type === "text_delta") {
+        store.updateLastMessage(sessionId, (msg) => ({
+          ...msg,
+          content: msg.content + ame.delta,
+        }));
+      }
+      break;
+    }
+
+    case "tool_execution_start": {
+      const msgId = getLastAssistantMessageId(sessionId);
+      if (!msgId) break;
+      store.addToolCall(sessionId, msgId, {
+        id: event.toolCallId,
+        name: event.toolName,
+        args: typeof event.args === "string" ? event.args : JSON.stringify(event.args, null, 2),
+      });
+      break;
+    }
+
+    case "tool_execution_end": {
+      const msgId = getLastAssistantMessageId(sessionId);
+      if (!msgId) break;
+      const result = typeof event.result === "string" ? event.result : JSON.stringify(event.result, null, 2);
+      store.updateToolCall(sessionId, msgId, event.toolCallId, {
+        result,
+        isError: event.isError,
+      });
+      break;
+    }
+  }
+}
+
+const ws = connectWS({
   onSpec: (spec) => {
     hideEmpty();
     const store = useBridgeStore.getState();
@@ -91,13 +158,13 @@ const ws: WSHandle = connectWS({
   onSessionsList: (sessions) => {
     useBridgeStore.getState().setSessions(sessions);
   },
-  onPiEvent: (sessionId, event) => {
-    const newState = sessionStateFromEvent(event);
-    if (newState) {
-      useBridgeStore.getState().updateSessionState(sessionId, newState);
-    }
+  onPiEvent: handlePiEvent,
+  onExtensionUIRequest: (sessionId, request) => {
+    useBridgeStore.getState().setExtensionUIRequest({ sessionId, request });
   },
 });
+
+setWSHandle(ws);
 
 export { ws };
 
