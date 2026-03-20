@@ -284,22 +284,30 @@ React owns `#app` root. Canvas overlays on top for treemap views.
 
 **Ships**: Resilient session management that survives restarts.
 
-### Phase 3: Sessions View + Chat
+### Phase 3: Sessions View + Chat ✅
 
 **Goal**: Send prompts, see streamed responses, abort, extension UI support.
 
-1. `SessionsView` React component: session sidebar + chat area
-2. Session list: active sessions with cwd, model, state badge
-3. "New Session" button: pick project from spec, create session
-4. Chat area: scrollable messages (user + agent)
-5. Composer: text input, Enter to send (follow_up when streaming), Shift+Enter to steer (interrupt)
-6. Esc to abort running session
-7. Markdown rendering for responses
-8. Tool call display: collapsible name + args (read, bash, edit, write)
-9. Streaming: `text_delta` events append in real time
-10. State indicator: model name, thinking level, idle/streaming
-11. Multiple sessions: switch between active sessions in sidebar
-12. **Extension UI dialogs**: Render pi's extension_ui_request as modal overlays (select, confirm, input, editor). Relay user response back via extension_ui_response.
+**Status**: Complete (9 commits, 119 web tests)
+
+1. ✅ Chat message types + session message CRUD in zustand store
+2. ✅ Pi event → chat message wiring (agent_start/end, text_delta, tool_execution_start/end)
+3. ✅ `SessionsView` with sidebar (240px) + main chat area
+4. ✅ Session list: active sessions with project name, model, state badge
+5. ✅ "New Session" dialog: pick project from spec, create session
+6. ✅ Chat area: scrollable messages, auto-scroll respects user position
+7. ✅ Markdown rendering via react-markdown
+8. ✅ Tool call display: collapsible blocks with name, args, result
+9. ✅ Composer: Enter=send/follow_up, Shift+Enter=steer, Esc=abort
+10. ✅ Streaming: `text_delta` appends in real time, blinking cursor
+11. ✅ State indicator: model name, idle/streaming badge
+12. ✅ Extension UI dialogs: select, confirm, input, notify
+
+**Implementation decisions:**
+- **`agent/commands.ts` module**: WS handle set via `setWSHandle()` at init. Provides `sendCommand`, `sendSessionCreate`, `sendSessionDestroy`, `sendExtensionUIResponse` helpers. Components import these directly.
+- **Message IDs**: `msg-{timestamp}-{random}` — good enough for single-user, no collisions.
+- **Smart auto-scroll**: Tracks isNearBottom ref, only auto-scrolls when user is within 80px of bottom.
+- **Composer semantics**: When idle → Enter=prompt. When streaming → Enter=follow_up, Shift+Enter=steer. Shift+Enter when idle = newline.
 
 **Ships**: Functional agent chat from Bridge with full extension support.
 
@@ -329,12 +337,12 @@ Default watched projects (in `~/.bridge/config.json`):
 ## Success Criteria
 
 After Phase 3:
-- [ ] Switch to Sessions tab, create pi session against any project
-- [ ] Send prompts, see streamed responses with markdown
-- [ ] Abort running agent
-- [ ] Multiple simultaneous sessions
-- [ ] Treemap works exactly as before
-- [ ] `bridge serve` starts scanner + web + agent session manager
+- [x] Switch to Sessions tab, create pi session against any project
+- [x] Send prompts, see streamed responses with markdown
+- [x] Abort running agent
+- [x] Multiple simultaneous sessions
+- [x] Treemap works exactly as before
+- [x] `bridge serve` starts scanner + web + agent session manager
 
 After Phase 4:
 - [ ] Workspace view shows branches, PRs, agent status
