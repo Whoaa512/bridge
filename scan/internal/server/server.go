@@ -260,6 +260,8 @@ func (s *Server) handleWSMessage(c *wsClient, raw []byte) {
 		s.handlePiCommand(c, raw)
 	case "extension_ui_response":
 		s.handleExtensionUIResponse(c, raw)
+	default:
+		log.Printf("ws: unknown message type: %q", env.Type)
 	}
 }
 
