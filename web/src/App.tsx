@@ -1,6 +1,8 @@
 import { useEffect, useCallback } from "react";
 import { useBridgeStore, type View } from "./store";
 import { viewFromPath, pushView } from "./router";
+import WorkspaceView from "./views/WorkspaceView";
+import SessionsView from "./views/SessionsView";
 
 const TABS: { view: View; label: string; key: string }[] = [
   { view: "complexity", label: "Complexity", key: "1" },
@@ -46,22 +48,33 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
+  const viewContent = (() => {
+    switch (activeView) {
+      case "workspace": return <WorkspaceView />;
+      case "sessions": return <SessionsView />;
+      default: return null;
+    }
+  })();
+
   return (
-    <nav style={styles.bar}>
-      {TABS.map((tab) => (
-        <button
-          key={tab.view}
-          onClick={() => switchView(tab.view)}
-          style={{
-            ...styles.tab,
-            ...(activeView === tab.view ? styles.active : {}),
-          }}
-        >
-          <span>{tab.label}</span>
-          <kbd style={styles.kbd}>{tab.key}</kbd>
-        </button>
-      ))}
-    </nav>
+    <>
+      <nav style={styles.bar}>
+        {TABS.map((tab) => (
+          <button
+            key={tab.view}
+            onClick={() => switchView(tab.view)}
+            style={{
+              ...styles.tab,
+              ...(activeView === tab.view ? styles.active : {}),
+            }}
+          >
+            <span>{tab.label}</span>
+            <kbd style={styles.kbd}>{tab.key}</kbd>
+          </button>
+        ))}
+      </nav>
+      {viewContent && <div style={styles.viewPanel}>{viewContent}</div>}
+    </>
   );
 }
 
@@ -107,5 +120,14 @@ const styles = {
     color: "#8b949e",
     border: "1px solid #30363d",
     fontFamily: "inherit",
+  },
+  viewPanel: {
+    position: "fixed" as const,
+    top: 40,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: "#0d1117",
+    zIndex: 40,
   },
 };
