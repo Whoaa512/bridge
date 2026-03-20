@@ -1,5 +1,6 @@
 import { useEffect, useCallback } from "react";
 import { useBridgeStore, type View } from "./store";
+import { viewFromPath, pushView } from "./router";
 
 const TABS: { view: View; label: string; key: string }[] = [
   { view: "complexity", label: "Complexity", key: "1" },
@@ -17,12 +18,28 @@ export default function App() {
   const activeView = useBridgeStore((s) => s.activeView);
   const setActiveView = useBridgeStore((s) => s.setActiveView);
 
+  const switchView = useCallback((view: View) => {
+    setActiveView(view);
+    pushView(view);
+  }, [setActiveView]);
+
+  useEffect(() => {
+    const initial = viewFromPath();
+    if (initial !== activeView) setActiveView(initial);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const onPopState = () => setActiveView(viewFromPath());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [setActiveView]);
+
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (isInputFocused()) return;
     const tab = TABS.find((t) => t.key === e.key);
     if (!tab) return;
-    setActiveView(tab.view);
-  }, [setActiveView]);
+    switchView(tab.view);
+  }, [switchView]);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
@@ -34,13 +51,13 @@ export default function App() {
       {TABS.map((tab) => (
         <button
           key={tab.view}
-          onClick={() => setActiveView(tab.view)}
+          onClick={() => switchView(tab.view)}
           style={{
             ...styles.tab,
             ...(activeView === tab.view ? styles.active : {}),
           }}
         >
-          <span style={styles.label}>{tab.label}</span>
+          <span>{tab.label}</span>
           <kbd style={styles.kbd}>{tab.key}</kbd>
         </button>
       ))}
@@ -82,7 +99,6 @@ const styles = {
     color: "#c9d1d9",
     background: "#21262d",
   },
-  label: {},
   kbd: {
     fontSize: 10,
     padding: "1px 4px",
