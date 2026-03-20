@@ -1,10 +1,12 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useBridgeStore } from "../store";
 import { filterProjects, DEFAULT_FILTER } from "../core/filter";
 import type { SessionInfo } from "../agent/ws-types";
 import AttentionBar, { computeAttentionItems } from "./workspace/AttentionBar";
 import StatsBar from "./workspace/StatsBar";
+import SearchFilter from "./workspace/SearchFilter";
 import ProjectCard from "./workspace/ProjectCard";
+import { filterWorkspaceProjects, type WorkspaceFilter } from "./workspace/filter-utils";
 
 export default function WorkspaceView() {
   const spec = useBridgeStore((s) => s.spec);
@@ -21,6 +23,9 @@ export default function WorkspaceView() {
     return map;
   }, [sessions]);
 
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeFilter, setActiveFilter] = useState<WorkspaceFilter>("all");
+
   if (!spec) {
     return <div style={styles.empty}>Loading workspace…</div>;
   }
@@ -32,6 +37,8 @@ export default function WorkspaceView() {
   const prCount = projects.reduce((sum, p) => sum + p.prs.length, 0);
   const agentCount = Array.from(sessions.values()).filter((s) => s.state === "idle" || s.state === "streaming").length;
 
+  const filtered = filterWorkspaceProjects(projects, activeFilter, searchQuery, sessionsByProject);
+
   return (
     <div style={styles.container}>
       <AttentionBar items={attentionItems} />
@@ -41,8 +48,14 @@ export default function WorkspaceView() {
         prCount={prCount}
         agentCount={agentCount}
       />
+      <SearchFilter
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        activeFilter={activeFilter}
+        onFilterChange={setActiveFilter}
+      />
       <div style={styles.grid}>
-        {projects.map((p) => (
+        {filtered.map((p) => (
           <ProjectCard key={p.id} project={p} sessions={sessionsByProject.get(p.id)} />
         ))}
       </div>
