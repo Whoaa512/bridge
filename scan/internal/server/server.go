@@ -123,6 +123,10 @@ func (s *Server) SetSpec(sp *spec.BridgeSpec) {
 	s.broadcastSpec(sp)
 }
 
+func (s *Server) SetSessionManager(sm *agent.SessionManager) {
+	s.sessions = sm
+}
+
 func (s *Server) broadcastSpec(sp *spec.BridgeSpec) {
 	msg, err := marshalFullSync(sp)
 	if err != nil {

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/cjwinslow/bridge/scan/internal/agent"
 	"github.com/cjwinslow/bridge/scan/internal/config"
 	"github.com/cjwinslow/bridge/scan/internal/discover"
 	"github.com/cjwinslow/bridge/scan/internal/server"
@@ -187,6 +188,38 @@ func runServe() {
 	srv := server.New(port, opts...)
 	srv.SetSpec(s)
 
+	sm := agent.NewSessionManager(func(sessionID string, data json.RawMessage) {
+		kind := agent.ClassifyOutput(data)
+		var wrapped []byte
+		var merr error
+
+		switch kind {
+		case "response":
+			wrapped, merr = json.Marshal(map[string]interface{}{
+				"type":      "pi_response",
+				"sessionId": sessionID,
+				"response":  json.RawMessage(data),
+			})
+		case "extension_ui_request":
+			wrapped, merr = json.Marshal(map[string]interface{}{
+				"type":      "extension_ui_request",
+				"sessionId": sessionID,
+				"request":   json.RawMessage(data),
+			})
+		default:
+			wrapped, merr = json.Marshal(map[string]interface{}{
+				"type":      "pi_event",
+				"sessionId": sessionID,
+				"event":     json.RawMessage(data),
+			})
+		}
+		if merr != nil {
+			return
+		}
+		srv.Broadcast(wrapped)
+	})
+	srv.SetSessionManager(sm)
+
 	cache := watch.NewCache()
 	var w *watch.Watcher
 	w, err = watch.NewWatcher(cache, func(projectPath string) {
@@ -230,6 +263,7 @@ func runServe() {
 	<-sig
 
 	fmt.Fprintf(os.Stderr, "\nShutting down...\n")
+	sm.Shutdown()
 	w.Close()
 	srv.Close()
 	lock.Release()
