@@ -183,6 +183,11 @@ func (m *SessionManager) Send(id string, cmd json.RawMessage) error {
 	if !ok {
 		return fmt.Errorf("session %q not found", id)
 	}
+	select {
+	case <-h.done:
+		return fmt.Errorf("session %q has exited", id)
+	default:
+	}
 	return h.stdin.Write(cmd)
 }
 
