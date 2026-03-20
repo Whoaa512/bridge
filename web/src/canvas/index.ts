@@ -16,3 +16,4 @@ export {
   zoomAtPoint,
   contentBounds,
 } from "./camera";
+export { keyToDirection, panCamera } from "./keyboard";

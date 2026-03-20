@@ -18,6 +18,8 @@ import {
   cameraForRect,
   zoomAtPoint,
   contentBounds,
+  keyToDirection,
+  panCamera,
 } from "./canvas";
 import { showDrawer, hideDrawer, showLoading, hideLoading, updateLoading, showEmpty, hideEmpty } from "./ui";
 
@@ -281,7 +283,15 @@ async function main() {
   });
 
   window.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") hideDrawer();
+    if (e.key === "Escape") {
+      hideDrawer();
+      return;
+    }
+    const dir = keyToDirection(e.key);
+    if (dir) {
+      e.preventDefault();
+      state.targetCamera = panCamera(state.targetCamera, dir);
+    }
   });
 
   window.addEventListener("resize", () => resizeCanvas(canvas, state));
