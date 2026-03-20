@@ -120,3 +120,44 @@ func TestGetStatsAheadBehindNoRemote(t *testing.T) {
 		t.Errorf("ahead/behind = %d/%d, want 0/0 (no remote)", stats.Ahead, stats.Behind)
 	}
 }
+
+func TestGetStatsBranches(t *testing.T) {
+	dir := initTestRepo(t)
+
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=test",
+			"GIT_AUTHOR_EMAIL=test@test.com",
+			"GIT_COMMITTER_NAME=test",
+			"GIT_COMMITTER_EMAIL=test@test.com",
+		)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	run("branch", "feature-a")
+	run("branch", "feature-b")
+
+	stats, err := GetStats(dir)
+	if err != nil {
+		t.Fatalf("GetStats: %v", err)
+	}
+
+	if len(stats.Branches) != 3 {
+		t.Errorf("branches count = %d, want 3, got %v", len(stats.Branches), stats.Branches)
+	}
+
+	has := map[string]bool{}
+	for _, b := range stats.Branches {
+		has[b] = true
+	}
+	for _, want := range []string{"main", "feature-a", "feature-b"} {
+		if !has[want] {
+			t.Errorf("missing branch %q in %v", want, stats.Branches)
+		}
+	}
+}

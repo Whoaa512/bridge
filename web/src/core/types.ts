@@ -40,6 +40,7 @@ export interface Project {
 
 export interface GitStatus {
   branch: string;
+  branches: string[];
   uncommitted: number;
   ahead: number;
   behind: number;

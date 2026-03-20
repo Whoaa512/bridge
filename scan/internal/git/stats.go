@@ -10,6 +10,7 @@ import (
 
 type Stats struct {
 	Branch      string
+	Branches    []string
 	Uncommitted int
 	Ahead       int
 	Behind      int
@@ -27,6 +28,7 @@ func GetStats(repoPath string) (*Stats, error) {
 	}
 	s.Branch = strings.TrimSpace(branch)
 
+	s.Branches = listBranches(repoPath)
 	s.Uncommitted = countUncommitted(repoPath)
 	s.Ahead, s.Behind = getAheadBehind(repoPath)
 	s.StashCount = countStash(repoPath)
@@ -107,4 +109,16 @@ func RunGitCmd(repoPath string, args ...string) (string, error) {
 		return "", err
 	}
 	return string(out), nil
+}
+
+func listBranches(repoPath string) []string {
+	out, err := RunGitCmd(repoPath, "branch", "--format=%(refname:short)")
+	if err != nil {
+		return []string{}
+	}
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return []string{}
+	}
+	return strings.Split(out, "\n")
 }

@@ -172,6 +172,7 @@ func buildProject(dp Project, cfg *config.Config) spec.Project {
 		} else {
 			p.Git = &spec.GitStatus{
 				Branch:      stats.Branch,
+				Branches:    stats.Branches,
 				Uncommitted: stats.Uncommitted,
 				Ahead:       stats.Ahead,
 				Behind:      stats.Behind,

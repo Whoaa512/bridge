@@ -42,6 +42,7 @@ type Project struct {
 
 type GitStatus struct {
 	Branch      string    `json:"branch"`
+	Branches    []string  `json:"branches"`
 	Uncommitted int       `json:"uncommitted"`
 	Ahead       int       `json:"ahead"`
 	Behind      int       `json:"behind"`

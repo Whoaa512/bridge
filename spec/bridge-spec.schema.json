@@ -128,9 +128,13 @@
     },
     "GitStatus": {
       "type": "object",
-      "required": ["branch", "uncommitted", "ahead", "behind", "stashCount", "lastCommit"],
+      "required": ["branch", "branches", "uncommitted", "ahead", "behind", "stashCount", "lastCommit"],
       "properties": {
         "branch": { "type": "string" },
+        "branches": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "uncommitted": { "type": "integer", "minimum": 0 },
         "ahead": { "type": "integer", "minimum": 0 },
         "behind": { "type": "integer", "minimum": 0 },
