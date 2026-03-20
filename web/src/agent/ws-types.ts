@@ -19,7 +19,7 @@ export type BridgeWSEvent =
   | { type: "full_sync"; spec: unknown }
   | { type: "session_created"; session: SessionInfo }
   | { type: "session_destroyed"; sessionId: string }
-  | { type: "session_exit"; sessionId: string }
+  | { type: "session_exit"; sessionId: string; exitCode?: number }
   | { type: "session_error"; sessionId: string; error: string }
   | { type: "sessions_list"; sessions: SessionInfo[] }
   | { type: "pi_event"; sessionId: string; event: AgentEvent }

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -25,6 +26,22 @@ while IFS= read -r line; do
   echo "$line"
 done
 `
+	if err := os.WriteFile(script, []byte(content), 0755); err != nil {
+		t.Fatalf("write script: %v", err)
+	}
+	return script
+}
+
+func helperScriptExitCode(t *testing.T, code int) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("test requires unix shell")
+	}
+
+	script := filepath.Join(dir, "fake-pi")
+	content := fmt.Sprintf("#!/bin/sh\nexit %d\n", code)
 	if err := os.WriteFile(script, []byte(content), 0755); err != nil {
 		t.Fatalf("write script: %v", err)
 	}
@@ -287,4 +304,63 @@ func TestRecoverSessionsBadCWD(t *testing.T) {
 	if len(entries) != 0 {
 		t.Errorf("manifest should be empty after failed recovery, got %d", len(entries))
 	}
+}
+
+func TestSessionExitCode(t *testing.T) {
+	script := helperScriptExitCode(t, 1)
+
+	var mu sync.Mutex
+	var events []json.RawMessage
+
+	sm := NewSessionManager(func(_ string, data json.RawMessage) {
+		mu.Lock()
+		events = append(events, data)
+		mu.Unlock()
+	}, filepath.Join(t.TempDir(), "active.json"))
+	sm.piBinary = script
+	defer sm.Shutdown()
+
+	sm.Create("sess-crash", t.TempDir(), "model", "proj")
+
+	deadline := time.After(3 * time.Second)
+	for {
+		mu.Lock()
+		found := false
+		for _, ev := range events {
+			if strings.Contains(string(ev), "session_exit") {
+				found = true
+				break
+			}
+		}
+		mu.Unlock()
+		if found {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timeout waiting for session_exit")
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	for _, ev := range events {
+		var obj map[string]interface{}
+		json.Unmarshal(ev, &obj)
+		if obj["type"] == "session_exit" {
+			code, ok := obj["exitCode"].(float64)
+			if !ok {
+				t.Error("exitCode missing from session_exit")
+				return
+			}
+			if int(code) != 1 {
+				t.Errorf("exitCode = %v, want 1", code)
+			}
+			return
+		}
+	}
+	t.Error("session_exit not found in events")
 }

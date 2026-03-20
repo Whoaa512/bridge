@@ -182,9 +182,15 @@ func (m *SessionManager) readLoop(h *SessionHandle) {
 
 			m.manifest.Remove(h.ID)
 
-			exitEvent, _ := json.Marshal(map[string]string{
+			exitCode := -1
+			if h.process.ProcessState != nil {
+				exitCode = h.process.ProcessState.ExitCode()
+			}
+
+			exitEvent, _ := json.Marshal(map[string]interface{}{
 				"type":      "session_exit",
 				"sessionId": h.ID,
+				"exitCode":  exitCode,
 			})
 			m.onEvent(h.ID, exitEvent)
 			return
