@@ -266,13 +266,58 @@ func (m *SessionManager) Destroy(id string) error {
 
 func (m *SessionManager) Shutdown() {
 	m.mu.Lock()
-	ids := make([]string, 0, len(m.sessions))
-	for id := range m.sessions {
-		ids = append(ids, id)
+	handles := make([]*SessionHandle, 0, len(m.sessions))
+	for _, h := range m.sessions {
+		handles = append(handles, h)
 	}
+	m.sessions = make(map[string]*SessionHandle)
 	m.mu.Unlock()
 
-	for _, id := range ids {
-		m.Destroy(id)
+	if len(handles) == 0 {
+		m.manifest.Clear()
+		return
 	}
+
+	log.Printf("shutting down %d sessions...", len(handles))
+
+	var wg sync.WaitGroup
+	for _, h := range handles {
+		wg.Add(1)
+		go func(h *SessionHandle) {
+			defer wg.Done()
+			if h.process.Process == nil {
+				return
+			}
+			h.process.Process.Signal(syscall.SIGTERM)
+			select {
+			case <-h.done:
+			case <-time.After(5 * time.Second):
+				h.process.Process.Kill()
+			}
+			<-h.done
+			h.process.Wait()
+		}(h)
+	}
+
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		log.Printf("shutdown timeout, force killing remaining sessions")
+		for _, h := range handles {
+			select {
+			case <-h.done:
+			default:
+				if h.process.Process != nil {
+					h.process.Process.Kill()
+				}
+			}
+		}
+		<-done
+	}
+
+	m.manifest.Clear()
+	log.Printf("all sessions shut down")
 }

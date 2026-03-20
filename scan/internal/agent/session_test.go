@@ -172,15 +172,24 @@ func TestSessionDestroyNotFound(t *testing.T) {
 
 func TestSessionShutdown(t *testing.T) {
 	script := helperScript(t)
-	sm := testManager(t, script)
+	manifestPath := filepath.Join(t.TempDir(), "active.json")
+	sm := NewSessionManager(func(string, json.RawMessage) {}, manifestPath)
+	sm.piBinary = script
 
 	sm.Create("sess-1", t.TempDir(), "model", "proj")
 	sm.Create("sess-2", t.TempDir(), "model", "proj")
+	sm.Create("sess-3", t.TempDir(), "model", "proj")
 
 	sm.Shutdown()
 
 	if len(sm.List()) != 0 {
 		t.Errorf("sessions remain after shutdown: %d", len(sm.List()))
+	}
+
+	m := NewManifest(manifestPath)
+	entries, _ := m.Load()
+	if len(entries) != 0 {
+		t.Errorf("manifest not cleared after shutdown: %d entries", len(entries))
 	}
 }
 
