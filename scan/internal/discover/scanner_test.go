@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/cjwinslow/bridge/scan/internal/config"
+	"github.com/cjwinslow/bridge/scan/internal/spec"
 	"github.com/cjwinslow/bridge/scan/internal/watch"
 )
 
@@ -128,5 +129,95 @@ func TestBuildSpecNilCache(t *testing.T) {
 	s := BuildSpec(cfg, nil)
 	if len(s.Projects) == 0 {
 		t.Fatal("nil cache should still produce projects")
+	}
+}
+
+func TestBuildSpecForPaths(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	repo1 := filepath.Join(tmp, "code", "alpha")
+	repo2 := filepath.Join(tmp, "code", "beta")
+	repo3 := filepath.Join(tmp, "code", "gamma")
+	makeGitRepoWithFiles(t, repo1, map[string]string{"main.go": "package main"})
+	makeGitRepoWithFiles(t, repo2, map[string]string{"index.js": "console.log('hi')"})
+	makeGitRepoWithFiles(t, repo3, map[string]string{"lib.rs": "fn main() {}"})
+
+	cfg := config.NewDefault([]string{filepath.Join(tmp, "code")})
+
+	s := BuildSpecForPaths([]string{repo1, repo3}, cfg, nil)
+
+	if len(s.Projects) != 2 {
+		t.Fatalf("expected 2 projects, got %d", len(s.Projects))
+	}
+
+	names := map[string]bool{}
+	for _, p := range s.Projects {
+		names[p.Name] = true
+	}
+	if !names["alpha"] || !names["gamma"] {
+		t.Errorf("expected alpha and gamma, got %v", names)
+	}
+	if names["beta"] {
+		t.Error("beta should not be in focused scan")
+	}
+}
+
+func TestBuildSpecForPathsSkipsMissing(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	repo := filepath.Join(tmp, "code", "real")
+	makeGitRepoWithFiles(t, repo, map[string]string{"main.go": "package main"})
+
+	cfg := config.NewDefault([]string{filepath.Join(tmp, "code")})
+
+	s := BuildSpecForPaths([]string{
+		repo,
+		filepath.Join(tmp, "code", "nonexistent"),
+	}, cfg, nil)
+
+	if len(s.Projects) != 1 {
+		t.Fatalf("expected 1 project (missing skipped), got %d", len(s.Projects))
+	}
+	if s.Projects[0].Name != "real" {
+		t.Errorf("expected 'real', got %q", s.Projects[0].Name)
+	}
+}
+
+func TestBuildSpecForPathsEmpty(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	cfg := config.NewDefault([]string{filepath.Join(tmp, "code")})
+
+	s := BuildSpecForPaths([]string{}, cfg, nil)
+
+	if len(s.Projects) != 0 {
+		t.Fatalf("expected 0 projects for empty paths, got %d", len(s.Projects))
+	}
+	if s.Version != spec.Version {
+		t.Errorf("expected version %s, got %s", spec.Version, s.Version)
+	}
+}
+
+func TestBuildSpecForPathsWithCache(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	repo := filepath.Join(tmp, "code", "cached")
+	makeGitRepoWithFiles(t, repo, map[string]string{"main.go": "package main"})
+
+	cfg := config.NewDefault([]string{filepath.Join(tmp, "code")})
+	cache := watch.NewCache()
+
+	s1 := BuildSpecForPaths([]string{repo}, cfg, cache)
+	if cache.Len() == 0 {
+		t.Fatal("cache should be populated after BuildSpecForPaths")
+	}
+
+	s2 := BuildSpecForPaths([]string{repo}, cfg, cache)
+	if len(s2.Projects) != len(s1.Projects) {
+		t.Errorf("cached scan got %d projects, want %d", len(s2.Projects), len(s1.Projects))
 	}
 }
