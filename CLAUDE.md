@@ -57,7 +57,7 @@ Scans ~108 git repos + 617 monorepo children in ~4s. Key design choices:
 - **Filesystem reads over git subprocesses**: stash from `.git/logs/refs/stash`, branches from `.git/refs/heads/`, remote URL from `.git/config`, last commit from `.git/logs/HEAD`
 - **shouldSkipGitFile**: uses `IndexByte` scanning + map lookup (was 40% of CPU with filepath.Match)
 - **countCommitsThisWeek**: skipped entirely if last commit > 7 days ago
-- ⚠️ **Cache is NOT wired up** — `watch/cache.go` exists (TTL tiers, invalidation) but `BuildSpec` never uses it. Every rescan recomputes all 725 projects. Wiring cache = rescans in ~50ms instead of ~4s.
+- **Cache is wired up** — `BuildSpec` takes `*watch.Cache` (nil for one-shot scans). Initial serve scan seeds cache; watcher-triggered rescans only recompute invalidated projects. Typical single-project rescan drops from ~4s to ~50-200ms.
 
 ## Web Conventions
 
