@@ -15,6 +15,8 @@ import { filterWorkspaceProjects, sortWorkspaceProjects, type WorkspaceFilter, t
 export default function WorkspaceView() {
   const spec = useBridgeStore((s) => s.spec);
   const sessions = useBridgeStore((s) => s.sessions);
+  const focusedIds = useBridgeStore((s) => s.focusedProjectIds);
+  const setShowProjectSearch = useBridgeStore((s) => s.setShowProjectSearch);
 
   const sessionsByProject = useMemo(() => {
     const map = new Map<string, SessionInfo[]>();
@@ -46,8 +48,10 @@ export default function WorkspaceView() {
 
   const projects = useMemo(() => {
     if (!spec) return [];
-    return filterProjects(spec.projects, DEFAULT_FILTER);
-  }, [spec]);
+    const filtered = filterProjects(spec.projects, DEFAULT_FILTER);
+    if (focusedIds.size === 0) return filtered;
+    return filtered.filter((p) => focusedIds.has(p.id));
+  }, [spec, focusedIds]);
 
   const attentionItems = useMemo(() => computeAttentionItems(projects, sessions), [projects, sessions]);
 
@@ -72,12 +76,22 @@ export default function WorkspaceView() {
   return (
     <div style={styles.container}>
       <AttentionBar items={attentionItems} onFilterClick={setActiveFilter} />
-      <StatsBar
-        projectCount={projects.length}
-        uncommittedCount={stats.uncommittedCount}
-        prCount={stats.prCount}
-        agentCount={stats.agentCount}
-      />
+      <div style={styles.statsRow}>
+        <StatsBar
+          projectCount={projects.length}
+          uncommittedCount={stats.uncommittedCount}
+          prCount={stats.prCount}
+          agentCount={stats.agentCount}
+        />
+        <button
+          style={styles.addButton}
+          onClick={() => setShowProjectSearch(true)}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "#30363d"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "#21262d"; }}
+        >
+          + Add project
+        </button>
+      </div>
       <SearchFilter
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -86,19 +100,34 @@ export default function WorkspaceView() {
         activeSort={activeSort}
         onSortChange={setActiveSort}
       />
-      <div style={styles.grid}>
-        {filtered.map((p) => {
-          const ps = sessionsByProject.get(p.id);
-          return (
-            <ProjectCard
-              key={p.id}
-              project={p}
-              sessions={ps}
-              onClick={() => handleCardClick(p, ps)}
-            />
-          );
-        })}
-      </div>
+      {filtered.length === 0 && focusedIds.size === 0 ? (
+        <div style={styles.emptyState}>
+          <div style={styles.emptyTitle}>No projects selected</div>
+          <div style={styles.emptyHint}>Press ⌘K to add projects to your workspace</div>
+          <button
+            style={styles.emptyButton}
+            onClick={() => setShowProjectSearch(true)}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "#30363d"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "#21262d"; }}
+          >
+            Add projects
+          </button>
+        </div>
+      ) : (
+        <div style={styles.grid}>
+          {filtered.map((p) => {
+            const ps = sessionsByProject.get(p.id);
+            return (
+              <ProjectCard
+                key={p.id}
+                project={p}
+                sessions={ps}
+                onClick={() => handleCardClick(p, ps)}
+              />
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -120,6 +149,26 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#8b949e",
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
   },
+  statsRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    borderBottom: "1px solid #30363d",
+  },
+  addButton: {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+    padding: "4px 12px",
+    borderRadius: 12,
+    background: "#21262d",
+    border: "1px solid #30363d",
+    color: "#8b949e",
+    fontSize: 12,
+    cursor: "pointer",
+    marginRight: 16,
+    whiteSpace: "nowrap" as const,
+  },
   grid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
@@ -127,5 +176,32 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 16,
     overflowY: "auto",
     flex: 1,
+  },
+  emptyState: {
+    display: "flex",
+    flexDirection: "column" as const,
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
+    gap: 12,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: 600,
+    color: "#c9d1d9",
+  },
+  emptyHint: {
+    fontSize: 14,
+    color: "#8b949e",
+  },
+  emptyButton: {
+    marginTop: 8,
+    padding: "8px 20px",
+    borderRadius: 6,
+    background: "#21262d",
+    border: "1px solid #30363d",
+    color: "#c9d1d9",
+    fontSize: 14,
+    cursor: "pointer",
   },
 };

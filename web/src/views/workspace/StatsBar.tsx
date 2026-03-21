@@ -30,7 +30,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     gap: 8,
     padding: "10px 16px",
-    borderBottom: "1px solid #30363d",
+    flex: 1,
   },
   pill: {
     display: "flex",
