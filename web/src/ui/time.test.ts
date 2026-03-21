@@ -5,7 +5,7 @@ function ago(seconds: number): string {
   return new Date(Date.now() - seconds * 1000).toISOString();
 }
 
-describe("relativeTime", () => {
+describe("relativeTime verbose (default)", () => {
   test("just now for < 1 minute", () => {
     expect(relativeTime(ago(0))).toBe("just now");
     expect(relativeTime(ago(30))).toBe("just now");
@@ -39,5 +39,37 @@ describe("relativeTime", () => {
   test("X months ago", () => {
     expect(relativeTime(ago(60 * 86400))).toBe("2 months ago");
     expect(relativeTime(ago(90 * 86400))).toBe("3 months ago");
+  });
+});
+
+describe("relativeTime terse", () => {
+  test("just now for < 1 minute", () => {
+    expect(relativeTime(ago(0), "terse")).toBe("just now");
+    expect(relativeTime(ago(30), "terse")).toBe("just now");
+  });
+
+  test("minutes", () => {
+    expect(relativeTime(ago(60), "terse")).toBe("1m ago");
+    expect(relativeTime(ago(45 * 60), "terse")).toBe("45m ago");
+  });
+
+  test("hours", () => {
+    expect(relativeTime(ago(3600), "terse")).toBe("1h ago");
+    expect(relativeTime(ago(7200), "terse")).toBe("2h ago");
+  });
+
+  test("days", () => {
+    expect(relativeTime(ago(86400), "terse")).toBe("1d ago");
+    expect(relativeTime(ago(3 * 86400), "terse")).toBe("3d ago");
+    expect(relativeTime(ago(14 * 86400), "terse")).toBe("14d ago");
+  });
+
+  test("months", () => {
+    expect(relativeTime(ago(60 * 86400), "terse")).toBe("2mo ago");
+    expect(relativeTime(ago(90 * 86400), "terse")).toBe("3mo ago");
+  });
+
+  test("negative/NaN returns just now", () => {
+    expect(relativeTime("invalid", "terse")).toBe("just now");
   });
 });

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Project } from "../../core/types";
 import type { SessionInfo } from "../../agent/ws-types";
-import { relativeTime } from "./time-utils";
+import { relativeTime } from "../../ui/time";
 
 interface Props {
   project: Project;
@@ -30,9 +30,9 @@ export default function ProjectCard({ project, sessions, onClick }: Props) {
   const uncommitted = project.git?.uncommitted ?? 0;
   const prCount = project.prs.length;
   const lastActivity = project.activity?.lastTouch
-    ? relativeTime(project.activity.lastTouch)
+    ? relativeTime(project.activity.lastTouch, "terse")
     : project.git?.lastCommit
-      ? relativeTime(project.git.lastCommit)
+      ? relativeTime(project.git.lastCommit, "terse")
       : "unknown";
 
   const hasAgents = sessions && sessions.length > 0;

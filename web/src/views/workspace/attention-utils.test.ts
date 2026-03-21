@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { computeAttentionItems } from "./AttentionBar";
+import { computeAttentionItems } from "./attention-utils";
 import type { Project } from "../../core/types";
 import type { SessionInfo } from "../../agent/ws-types";
 

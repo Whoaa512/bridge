@@ -1,14 +1,14 @@
 interface Props {
   projectCount: number;
-  branchCount: number;
+  uncommittedCount: number;
   prCount: number;
   agentCount: number;
 }
 
-export default function StatsBar({ projectCount, branchCount, prCount, agentCount }: Props) {
+export default function StatsBar({ projectCount, uncommittedCount, prCount, agentCount }: Props) {
   const pills: { label: string; value: number }[] = [
     { label: "Projects", value: projectCount },
-    { label: "Branches", value: branchCount },
+    { label: "Uncommitted", value: uncommittedCount },
     { label: "PRs", value: prCount },
     { label: "Active Agents", value: agentCount },
   ];

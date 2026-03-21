@@ -5,7 +5,8 @@ import type { SessionInfo } from "../agent/ws-types";
 import type { Project } from "../core/types";
 import { sendSessionCreate } from "../agent/commands";
 import { pushView } from "../router";
-import AttentionBar, { computeAttentionItems } from "./workspace/AttentionBar";
+import AttentionBar from "./workspace/AttentionBar";
+import { computeAttentionItems } from "./workspace/attention-utils";
 import StatsBar from "./workspace/StatsBar";
 import SearchFilter from "./workspace/SearchFilter";
 import ProjectCard from "./workspace/ProjectCard";
@@ -42,27 +43,36 @@ export default function WorkspaceView() {
     pushView("sessions");
   }, []);
 
+  const projects = useMemo(() => {
+    if (!spec) return [];
+    return filterProjects(spec.projects, DEFAULT_FILTER);
+  }, [spec]);
+
+  const attentionItems = useMemo(() => computeAttentionItems(projects, sessions), [projects, sessions]);
+
+  const stats = useMemo(() => ({
+    uncommittedCount: projects.filter((p) => (p.git?.uncommitted ?? 0) > 0).length,
+    prCount: projects.reduce((sum, p) => sum + p.prs.length, 0),
+    agentCount: Array.from(sessions.values()).filter((s) => s.state === "idle" || s.state === "streaming").length,
+  }), [projects, sessions]);
+
+  const filtered = useMemo(
+    () => filterWorkspaceProjects(projects, activeFilter, searchQuery, sessionsByProject),
+    [projects, activeFilter, searchQuery, sessionsByProject],
+  );
+
   if (!spec) {
     return <div style={styles.empty}>Loading workspace…</div>;
   }
 
-  const projects = filterProjects(spec.projects, DEFAULT_FILTER);
-  const attentionItems = computeAttentionItems(projects, sessions);
-
-  const branchCount = projects.reduce((sum, p) => sum + (p.git?.branches.length ?? 0), 0);
-  const prCount = projects.reduce((sum, p) => sum + p.prs.length, 0);
-  const agentCount = Array.from(sessions.values()).filter((s) => s.state === "idle" || s.state === "streaming").length;
-
-  const filtered = filterWorkspaceProjects(projects, activeFilter, searchQuery, sessionsByProject);
-
   return (
     <div style={styles.container}>
-      <AttentionBar items={attentionItems} />
+      <AttentionBar items={attentionItems} onFilterClick={setActiveFilter} />
       <StatsBar
         projectCount={projects.length}
-        branchCount={branchCount}
-        prCount={prCount}
-        agentCount={agentCount}
+        uncommittedCount={stats.uncommittedCount}
+        prCount={stats.prCount}
+        agentCount={stats.agentCount}
       />
       <SearchFilter
         searchQuery={searchQuery}

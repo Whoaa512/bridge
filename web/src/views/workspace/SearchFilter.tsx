@@ -1,4 +1,4 @@
-import type { WorkspaceFilter } from "./filter-utils";
+import { type WorkspaceFilter, isPillFilter, filterLabel } from "./filter-utils";
 
 const PILLS: { filter: WorkspaceFilter; label: string }[] = [
   { filter: "all", label: "All" },
@@ -15,6 +15,8 @@ interface Props {
 }
 
 export default function SearchFilter({ searchQuery, onSearchChange, activeFilter, onFilterChange }: Props) {
+  const showChip = !isPillFilter(activeFilter);
+
   return (
     <div style={styles.row}>
       <input
@@ -34,6 +36,11 @@ export default function SearchFilter({ searchQuery, onSearchChange, activeFilter
             {label}
           </button>
         ))}
+        {showChip && (
+          <button onClick={() => onFilterChange("all")} style={styles.chip}>
+            × {filterLabel(activeFilter)}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -76,6 +83,16 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid #30363d",
     borderRadius: 20,
     color: "#c9d1d9",
+    padding: "4px 14px",
+    fontSize: 13,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  },
+  chip: {
+    background: "rgba(88, 166, 255, 0.15)",
+    border: "1px solid #58a6ff4d",
+    borderRadius: 20,
+    color: "#58a6ff",
     padding: "4px 14px",
     fontSize: 13,
     cursor: "pointer",
