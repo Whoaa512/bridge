@@ -1,8 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useBridgeStore } from "../../store";
 import type { SessionInfo } from "../../agent/ws-types";
 import type { Project } from "../../core/types";
-import { sendSessionCreate } from "../../agent/commands";
+import { sendSessionCreate, sendProjectPin, sendProjectUnpin, sendProjectOptOut } from "../../agent/commands";
+import ContextMenu from "../../ui/ContextMenu";
+import type { ContextMenuItem } from "../../ui/ContextMenu";
 
 type ProjectEntry = { project: Project; sessions: SessionInfo[]; pinned: boolean };
 
@@ -28,32 +30,47 @@ function SessionRow({ session, isActive, onClick }: {
   );
 }
 
-function ProjectGroup({ project, sessions, activeSessionId, onSelect, onNew, pinned }: {
+function ProjectGroup({ project, sessions, activeSessionId, onSelect, onNew, pinned, onPin, onContextMenu }: {
   project: Project;
   sessions: SessionInfo[];
   activeSessionId: string | null;
   onSelect: (id: string) => void;
   onNew: (project: Project) => void;
   pinned: boolean;
+  onPin: () => void;
+  onContextMenu: (e: React.MouseEvent) => void;
 }) {
   const expanded = useBridgeStore((s) => s.expandedProjects.has(project.id));
   const toggle = useBridgeStore((s) => s.toggleProjectExpanded);
+  const [hovered, setHovered] = useState(false);
 
   const hasActive = sessions.some((s) => s.state === "streaming");
+  const showPinBtn = hovered || pinned;
 
   return (
     <div style={styles.group}>
-      <div style={styles.projectHeader}>
+      <div
+        style={styles.projectHeader}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onContextMenu={onContextMenu}
+      >
         <button onClick={() => toggle(project.id)} style={styles.projectToggle}>
           <span style={{
             ...styles.chevron,
             transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
           }}>›</span>
           {!expanded && hasActive && <span style={styles.activeDot} />}
-          {pinned && <span style={styles.pinnedStar}>★</span>}
           <span style={styles.projectName}>{project.name}</span>
           <span style={styles.sessionCount}>{sessions.length}</span>
         </button>
+        {showPinBtn && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onPin(); }}
+            style={{ ...styles.pinBtn, color: pinned ? "#d29922" : "#8b949e" }}
+            title={pinned ? "Unpin" : "Pin"}
+          >{pinned ? "★" : "☆"}</button>
+        )}
         <button
           onClick={(e) => { e.stopPropagation(); onNew(project); }}
           style={styles.addBtn}
@@ -87,6 +104,8 @@ export default function SessionSidebar() {
   const spec = useBridgeStore((s) => s.spec);
   const focusedIds = useBridgeStore((s) => s.focusedProjectIds);
   const pinnedIds = useBridgeStore((s) => s.pinnedProjectIds);
+
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; projectId: string } | null>(null);
 
   const sessionList = Array.from(sessions.values());
 
@@ -130,6 +149,49 @@ export default function SessionSidebar() {
     sendSessionCreate(project.path, project.id);
   }
 
+  function handlePin(projectId: string) {
+    const store = useBridgeStore.getState();
+    const isPinned = store.pinnedProjectIds.has(projectId);
+    if (isPinned) {
+      sendProjectUnpin(projectId);
+    } else {
+      sendProjectPin(projectId);
+    }
+    store.togglePinProject(projectId);
+  }
+
+  function handleContextMenu(e: React.MouseEvent, projectId: string) {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, projectId });
+  }
+
+  function buildContextMenuItems(projectId: string): ContextMenuItem[] {
+    const store = useBridgeStore.getState();
+    const isPinned = store.pinnedProjectIds.has(projectId);
+    return [
+      {
+        label: isPinned ? "Unpin" : "Pin",
+        onClick: () => handlePin(projectId),
+      },
+      {
+        label: "Remove from sidebar",
+        danger: true,
+        onClick: () => {
+          sendProjectOptOut(projectId);
+          store.removeFocusedProject(projectId);
+        },
+      },
+      {
+        label: "View complexity",
+        onClick: () => store.setActiveView("complexity"),
+      },
+    ];
+  }
+
+  function handleAddProject() {
+    useBridgeStore.getState().setShowProjectSearch(true);
+  }
+
   return (
     <div style={styles.sidebar}>
       <div style={styles.header}>
@@ -146,22 +208,35 @@ export default function SessionSidebar() {
               onSelect={setActiveSessionId}
               onNew={handleNewSession}
               pinned={entry.pinned}
+              onPin={() => handlePin(entry.project.id)}
+              onContextMenu={(e) => handleContextMenu(e, entry.project.id)}
             />
           </div>
         ))}
       </div>
+      <button onClick={handleAddProject} style={styles.addProjectBtn}>
+        <span style={styles.addProjectKbd}>⌘K</span> Add project
+      </button>
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={buildContextMenuItems(contextMenu.projectId)}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }
 
-const styles = {
+const styles: Record<string, React.CSSProperties> = {
   sidebar: {
     width: 260,
     flexShrink: 0,
     background: "#161b22",
     borderRight: "1px solid #30363d",
     display: "flex",
-    flexDirection: "column" as const,
+    flexDirection: "column",
     height: "100%",
     overflow: "hidden",
   },
@@ -175,13 +250,13 @@ const styles = {
   headerLabel: {
     fontSize: 10,
     fontWeight: 600,
-    textTransform: "uppercase" as const,
+    textTransform: "uppercase",
     letterSpacing: "0.08em",
     color: "#8b949e",
   },
   list: {
     flex: 1,
-    overflowY: "auto" as const,
+    overflowY: "auto",
     padding: "0 6px 8px",
   },
   group: {
@@ -205,7 +280,7 @@ const styles = {
     fontWeight: 600,
     cursor: "pointer",
     fontFamily: "inherit",
-    textAlign: "left" as const,
+    textAlign: "left",
     borderRadius: 6,
     minWidth: 0,
   },
@@ -216,7 +291,7 @@ const styles = {
     transition: "transform 0.15s",
     flexShrink: 0,
     width: 10,
-    textAlign: "center" as const,
+    textAlign: "center",
   },
   activeDot: {
     width: 6,
@@ -226,22 +301,31 @@ const styles = {
     flexShrink: 0,
     marginLeft: -2,
   },
-  pinnedStar: {
-    color: "#d29922",
-    fontSize: 10,
-    marginRight: 2,
-    flexShrink: 0,
-  },
   projectName: {
     flex: 1,
     overflow: "hidden",
     textOverflow: "ellipsis",
-    whiteSpace: "nowrap" as const,
+    whiteSpace: "nowrap",
   },
   sessionCount: {
     fontSize: 11,
     color: "#8b949e",
     flexShrink: 0,
+  },
+  pinBtn: {
+    width: 24,
+    height: 24,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    border: "none",
+    background: "transparent",
+    fontSize: 13,
+    cursor: "pointer",
+    borderRadius: 4,
+    flexShrink: 0,
+    fontFamily: "inherit",
+    padding: 0,
   },
   addBtn: {
     width: 24,
@@ -273,7 +357,7 @@ const styles = {
     borderRadius: 4,
     background: "transparent",
     color: "#c9d1d9",
-    textAlign: "left" as const,
+    textAlign: "left",
     cursor: "pointer",
     fontSize: 12,
     fontFamily: "inherit",
@@ -288,7 +372,7 @@ const styles = {
     gap: 6,
     overflow: "hidden",
     textOverflow: "ellipsis",
-    whiteSpace: "nowrap" as const,
+    whiteSpace: "nowrap",
     flex: 1,
   },
   stateDot: {
@@ -312,5 +396,28 @@ const styles = {
     height: 1,
     background: "#21262d",
     margin: "6px 8px",
+  },
+  addProjectBtn: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    padding: "10px 14px",
+    border: "none",
+    borderTop: "1px solid #21262d",
+    background: "transparent",
+    color: "#8b949e",
+    fontSize: 12,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    flexShrink: 0,
+  },
+  addProjectKbd: {
+    fontSize: 10,
+    padding: "1px 4px",
+    borderRadius: 3,
+    background: "#21262d",
+    border: "1px solid #30363d",
+    color: "#8b949e",
   },
 };
