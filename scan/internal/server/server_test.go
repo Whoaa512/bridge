@@ -512,8 +512,8 @@ func testConfigServer(t *testing.T) (*Server, *config.Config) {
 
 func TestWSConfigUpdateOnConnect(t *testing.T) {
 	srv, cfg := testConfigServer(t)
-	cfg.AddFocusedProject("project:a")
-	cfg.AddPinnedProject("project:a")
+	cfg.AddFocusedProject("/code/a")
+	cfg.AddPinnedProject("/code/a")
 
 	conn := wsConnect(t, srv)
 
@@ -524,11 +524,11 @@ func TestWSConfigUpdateOnConnect(t *testing.T) {
 		t.Fatalf("type = %v, want config_update", msg["type"])
 	}
 	focused := msg["focusedProjects"].([]interface{})
-	if len(focused) != 1 || focused[0] != "project:a" {
+	if len(focused) != 1 || focused[0] != "/code/a" {
 		t.Errorf("focusedProjects = %v", focused)
 	}
 	pinned := msg["pinnedProjects"].([]interface{})
-	if len(pinned) != 1 || pinned[0] != "project:a" {
+	if len(pinned) != 1 || pinned[0] != "/code/a" {
 		t.Errorf("pinnedProjects = %v", pinned)
 	}
 }
@@ -540,31 +540,31 @@ func TestWSProjectOptIn(t *testing.T) {
 	readWSMsg(t, conn)
 	readWSMsg(t, conn)
 
-	sendWSMsg(t, conn, map[string]string{"type": "project_opt_in", "projectId": "project:code/test"})
+	sendWSMsg(t, conn, map[string]string{"type": "project_opt_in", "path": "/code/test"})
 	msg := readWSMsg(t, conn)
 
 	if msg["type"] != "config_update" {
 		t.Fatalf("type = %v, want config_update", msg["type"])
 	}
 	focused := msg["focusedProjects"].([]interface{})
-	if len(focused) != 1 || focused[0] != "project:code/test" {
+	if len(focused) != 1 || focused[0] != "/code/test" {
 		t.Errorf("focusedProjects = %v", focused)
 	}
-	if !cfg.HasFocusedProject("project:code/test") {
+	if !cfg.HasFocusedProject("/code/test") {
 		t.Error("config not updated")
 	}
 }
 
 func TestWSProjectOptOut(t *testing.T) {
 	srv, cfg := testConfigServer(t)
-	cfg.AddFocusedProject("project:code/test")
-	cfg.AddPinnedProject("project:code/test")
+	cfg.AddFocusedProject("/code/test")
+	cfg.AddPinnedProject("/code/test")
 
 	conn := wsConnect(t, srv)
 	readWSMsg(t, conn)
 	readWSMsg(t, conn)
 
-	sendWSMsg(t, conn, map[string]string{"type": "project_opt_out", "projectId": "project:code/test"})
+	sendWSMsg(t, conn, map[string]string{"type": "project_opt_out", "path": "/code/test"})
 	msg := readWSMsg(t, conn)
 
 	if msg["type"] != "config_update" {
@@ -586,27 +586,27 @@ func TestWSProjectPin(t *testing.T) {
 	readWSMsg(t, conn)
 	readWSMsg(t, conn)
 
-	sendWSMsg(t, conn, map[string]string{"type": "project_pin", "projectId": "project:a"})
+	sendWSMsg(t, conn, map[string]string{"type": "project_pin", "path": "/code/a"})
 	msg := readWSMsg(t, conn)
 
 	if msg["type"] != "config_update" {
 		t.Fatalf("type = %v, want config_update", msg["type"])
 	}
 	pinned := msg["pinnedProjects"].([]interface{})
-	if len(pinned) != 1 || pinned[0] != "project:a" {
+	if len(pinned) != 1 || pinned[0] != "/code/a" {
 		t.Errorf("pinnedProjects = %v", pinned)
 	}
 }
 
 func TestWSProjectUnpin(t *testing.T) {
 	srv, cfg := testConfigServer(t)
-	cfg.AddPinnedProject("project:a")
+	cfg.AddPinnedProject("/code/a")
 
 	conn := wsConnect(t, srv)
 	readWSMsg(t, conn)
 	readWSMsg(t, conn)
 
-	sendWSMsg(t, conn, map[string]string{"type": "project_unpin", "projectId": "project:a"})
+	sendWSMsg(t, conn, map[string]string{"type": "project_unpin", "path": "/code/a"})
 	msg := readWSMsg(t, conn)
 
 	if msg["type"] != "config_update" {
@@ -624,7 +624,7 @@ func TestWSProjectOptInNoConfig(t *testing.T) {
 	conn := wsConnect(t, srv)
 	readWSMsg(t, conn)
 
-	sendWSMsg(t, conn, map[string]string{"type": "project_opt_in", "projectId": "project:a"})
+	sendWSMsg(t, conn, map[string]string{"type": "project_opt_in", "path": "/code/a"})
 	msg := readWSMsg(t, conn)
 
 	if msg["type"] != "error" {
@@ -643,7 +643,7 @@ func TestWSProjectOptInBroadcastToAll(t *testing.T) {
 	readWSMsg(t, conn2)
 	readWSMsg(t, conn2)
 
-	sendWSMsg(t, conn1, map[string]string{"type": "project_opt_in", "projectId": "project:x"})
+	sendWSMsg(t, conn1, map[string]string{"type": "project_opt_in", "path": "/code/x"})
 
 	msg1 := readWSMsg(t, conn1)
 	if msg1["type"] != "config_update" {

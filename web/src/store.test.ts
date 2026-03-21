@@ -41,8 +41,8 @@ beforeEach(() => {
     messages: new Map(),
     activeSessionId: null,
     extensionUIRequest: null,
-    focusedProjectIds: new Set<string>(),
-    pinnedProjectIds: new Set<string>(),
+    focusedPaths: new Set<string>(),
+    pinnedPaths: new Set<string>(),
   });
 });
 
@@ -263,48 +263,48 @@ describe("Extension UI Request", () => {
 });
 
 describe("Focus & Pin Projects", () => {
-  test("setFocusedProjects sets from array", () => {
-    useBridgeStore.getState().setFocusedProjects(["p1", "p2"]);
-    const ids = useBridgeStore.getState().focusedProjectIds;
-    expect(ids.size).toBe(2);
-    expect(ids.has("p1")).toBe(true);
-    expect(ids.has("p2")).toBe(true);
+  test("setFocusedPaths sets from array", () => {
+    useBridgeStore.getState().setFocusedPaths(["/code/p1", "/code/p2"]);
+    const paths = useBridgeStore.getState().focusedPaths;
+    expect(paths.size).toBe(2);
+    expect(paths.has("/code/p1")).toBe(true);
+    expect(paths.has("/code/p2")).toBe(true);
   });
 
-  test("setPinnedProjects sets from array", () => {
-    useBridgeStore.getState().setPinnedProjects(["p1", "p3"]);
-    const ids = useBridgeStore.getState().pinnedProjectIds;
-    expect(ids.size).toBe(2);
-    expect(ids.has("p1")).toBe(true);
-    expect(ids.has("p3")).toBe(true);
+  test("setPinnedPaths sets from array", () => {
+    useBridgeStore.getState().setPinnedPaths(["/code/p1", "/code/p3"]);
+    const paths = useBridgeStore.getState().pinnedPaths;
+    expect(paths.size).toBe(2);
+    expect(paths.has("/code/p1")).toBe(true);
+    expect(paths.has("/code/p3")).toBe(true);
   });
 
-  test("addFocusedProject adds to existing set", () => {
-    useBridgeStore.getState().setFocusedProjects(["p1"]);
-    useBridgeStore.getState().addFocusedProject("p2");
+  test("addFocusedPath adds to existing set", () => {
+    useBridgeStore.getState().setFocusedPaths(["/code/p1"]);
+    useBridgeStore.getState().addFocusedPath("/code/p2");
 
-    const ids = useBridgeStore.getState().focusedProjectIds;
-    expect(ids.size).toBe(2);
-    expect(ids.has("p1")).toBe(true);
-    expect(ids.has("p2")).toBe(true);
+    const paths = useBridgeStore.getState().focusedPaths;
+    expect(paths.size).toBe(2);
+    expect(paths.has("/code/p1")).toBe(true);
+    expect(paths.has("/code/p2")).toBe(true);
   });
 
-  test("removeFocusedProject removes from both focused and pinned", () => {
-    useBridgeStore.getState().setFocusedProjects(["p1", "p2"]);
-    useBridgeStore.getState().setPinnedProjects(["p1"]);
+  test("removeFocusedPath removes from both focused and pinned", () => {
+    useBridgeStore.getState().setFocusedPaths(["/code/p1", "/code/p2"]);
+    useBridgeStore.getState().setPinnedPaths(["/code/p1"]);
 
-    useBridgeStore.getState().removeFocusedProject("p1");
+    useBridgeStore.getState().removeFocusedPath("/code/p1");
 
-    expect(useBridgeStore.getState().focusedProjectIds.has("p1")).toBe(false);
-    expect(useBridgeStore.getState().focusedProjectIds.has("p2")).toBe(true);
-    expect(useBridgeStore.getState().pinnedProjectIds.has("p1")).toBe(false);
+    expect(useBridgeStore.getState().focusedPaths.has("/code/p1")).toBe(false);
+    expect(useBridgeStore.getState().focusedPaths.has("/code/p2")).toBe(true);
+    expect(useBridgeStore.getState().pinnedPaths.has("/code/p1")).toBe(false);
   });
 
-  test("togglePinProject toggles pin state", () => {
-    useBridgeStore.getState().togglePinProject("p1");
-    expect(useBridgeStore.getState().pinnedProjectIds.has("p1")).toBe(true);
+  test("togglePinPath toggles pin state", () => {
+    useBridgeStore.getState().togglePinPath("/code/p1");
+    expect(useBridgeStore.getState().pinnedPaths.has("/code/p1")).toBe(true);
 
-    useBridgeStore.getState().togglePinProject("p1");
-    expect(useBridgeStore.getState().pinnedProjectIds.has("p1")).toBe(false);
+    useBridgeStore.getState().togglePinPath("/code/p1");
+    expect(useBridgeStore.getState().pinnedPaths.has("/code/p1")).toBe(false);
   });
 });

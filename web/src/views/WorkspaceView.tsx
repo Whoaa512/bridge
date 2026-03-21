@@ -15,7 +15,7 @@ import { filterWorkspaceProjects, sortWorkspaceProjects, type WorkspaceFilter, t
 export default function WorkspaceView() {
   const spec = useBridgeStore((s) => s.spec);
   const sessions = useBridgeStore((s) => s.sessions);
-  const focusedIds = useBridgeStore((s) => s.focusedProjectIds);
+  const focusedPaths = useBridgeStore((s) => s.focusedPaths);
   const setShowProjectSearch = useBridgeStore((s) => s.setShowProjectSearch);
 
   const sessionsByProject = useMemo(() => {
@@ -49,9 +49,9 @@ export default function WorkspaceView() {
   const projects = useMemo(() => {
     if (!spec) return [];
     const filtered = filterProjects(spec.projects, DEFAULT_FILTER);
-    if (focusedIds.size === 0) return filtered;
-    return filtered.filter((p) => focusedIds.has(p.id));
-  }, [spec, focusedIds]);
+    if (focusedPaths.size === 0) return filtered;
+    return filtered.filter((p) => focusedPaths.has(p.path));
+  }, [spec, focusedPaths]);
 
   const attentionItems = useMemo(() => computeAttentionItems(projects, sessions), [projects, sessions]);
 
@@ -100,7 +100,7 @@ export default function WorkspaceView() {
         activeSort={activeSort}
         onSortChange={setActiveSort}
       />
-      {filtered.length === 0 && focusedIds.size === 0 ? (
+      {filtered.length === 0 && focusedPaths.size === 0 ? (
         <div style={styles.emptyState}>
           <div style={styles.emptyTitle}>No projects selected</div>
           <div style={styles.emptyHint}>Press ⌘K to add projects to your workspace</div>

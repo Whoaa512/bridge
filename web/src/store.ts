@@ -50,13 +50,13 @@ export interface BridgeStore {
   expandedProjects: Set<string>;
   toggleProjectExpanded: (projectId: string) => void;
 
-  focusedProjectIds: Set<string>;
-  pinnedProjectIds: Set<string>;
-  setFocusedProjects: (ids: string[]) => void;
-  setPinnedProjects: (ids: string[]) => void;
-  addFocusedProject: (id: string) => void;
-  removeFocusedProject: (id: string) => void;
-  togglePinProject: (id: string) => void;
+  focusedPaths: Set<string>;
+  pinnedPaths: Set<string>;
+  setFocusedPaths: (paths: string[]) => void;
+  setPinnedPaths: (paths: string[]) => void;
+  addFocusedPath: (path: string) => void;
+  removeFocusedPath: (path: string) => void;
+  togglePinPath: (path: string) => void;
 
   showProjectSearch: boolean;
   setShowProjectSearch: (show: boolean) => void;
@@ -163,30 +163,30 @@ export const useBridgeStore = create<BridgeStore>((set, get) => ({
     set({ expandedProjects: next });
   },
 
-  focusedProjectIds: new Set<string>(),
-  pinnedProjectIds: new Set<string>(),
-  setFocusedProjects: (ids) => set({ focusedProjectIds: new Set(ids) }),
-  setPinnedProjects: (ids) => set({ pinnedProjectIds: new Set(ids) }),
-  addFocusedProject: (id) => {
-    const next = new Set(get().focusedProjectIds);
-    next.add(id);
-    set({ focusedProjectIds: next });
+  focusedPaths: new Set<string>(),
+  pinnedPaths: new Set<string>(),
+  setFocusedPaths: (paths) => set({ focusedPaths: new Set(paths) }),
+  setPinnedPaths: (paths) => set({ pinnedPaths: new Set(paths) }),
+  addFocusedPath: (path) => {
+    const next = new Set(get().focusedPaths);
+    next.add(path);
+    set({ focusedPaths: next });
   },
-  removeFocusedProject: (id) => {
-    const focused = new Set(get().focusedProjectIds);
-    focused.delete(id);
-    const pinned = new Set(get().pinnedProjectIds);
-    pinned.delete(id);
-    set({ focusedProjectIds: focused, pinnedProjectIds: pinned });
+  removeFocusedPath: (path) => {
+    const focused = new Set(get().focusedPaths);
+    focused.delete(path);
+    const pinned = new Set(get().pinnedPaths);
+    pinned.delete(path);
+    set({ focusedPaths: focused, pinnedPaths: pinned });
   },
-  togglePinProject: (id) => {
-    const next = new Set(get().pinnedProjectIds);
-    if (next.has(id)) {
-      next.delete(id);
+  togglePinPath: (path) => {
+    const next = new Set(get().pinnedPaths);
+    if (next.has(path)) {
+      next.delete(path);
     } else {
-      next.add(id);
+      next.add(path);
     }
-    set({ pinnedProjectIds: next });
+    set({ pinnedPaths: next });
   },
 
   showProjectSearch: false,

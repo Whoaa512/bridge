@@ -102,14 +102,14 @@ export default function SessionSidebar() {
   const activeSessionId = useBridgeStore((s) => s.activeSessionId);
   const setActiveSessionId = useBridgeStore((s) => s.setActiveSessionId);
   const spec = useBridgeStore((s) => s.spec);
-  const focusedIds = useBridgeStore((s) => s.focusedProjectIds);
-  const pinnedIds = useBridgeStore((s) => s.pinnedProjectIds);
+  const focusedPaths = useBridgeStore((s) => s.focusedPaths);
+  const pinnedPaths = useBridgeStore((s) => s.pinnedPaths);
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; projectId: string } | null>(null);
 
   const sortedEntries = useMemo(() => {
     const all = spec?.projects ?? [];
-    const filtered = focusedIds.size === 0 ? all : all.filter((p) => focusedIds.has(p.id));
+    const filtered = focusedPaths.size === 0 ? all : all.filter((p) => focusedPaths.has(p.path));
 
     const sessionsByProject = new Map<string, SessionInfo[]>();
     for (const s of sessions.values()) {
@@ -122,7 +122,7 @@ export default function SessionSidebar() {
     const entries: ProjectEntry[] = filtered.map((project) => ({
       project,
       sessions: sessionsByProject.get(project.id) ?? [],
-      pinned: pinnedIds.has(project.id),
+      pinned: pinnedPaths.has(project.path),
     }));
 
     entries.sort((a, b) => {
@@ -134,7 +134,7 @@ export default function SessionSidebar() {
     });
 
     return entries;
-  }, [spec, focusedIds, pinnedIds, sessions]);
+  }, [spec, focusedPaths, pinnedPaths, sessions]);
 
   const pinnedCount = sortedEntries.filter((e) => e.pinned).length;
   const hasDivider = pinnedCount > 0 && pinnedCount < sortedEntries.length;
@@ -147,34 +147,34 @@ export default function SessionSidebar() {
     sendSessionCreate(project.path, project.id);
   }
 
-  function handlePin(projectId: string) {
+  function handlePin(projectPath: string) {
     const store = useBridgeStore.getState();
-    const isPinned = store.pinnedProjectIds.has(projectId);
+    const isPinned = store.pinnedPaths.has(projectPath);
     if (isPinned) {
-      sendProjectUnpin(projectId);
+      sendProjectUnpin(projectPath);
     } else {
-      sendProjectPin(projectId);
+      sendProjectPin(projectPath);
     }
   }
 
-  function handleContextMenu(e: React.MouseEvent, projectId: string) {
+  function handleContextMenu(e: React.MouseEvent, projectPath: string) {
     e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY, projectId });
+    setContextMenu({ x: e.clientX, y: e.clientY, projectId: projectPath });
   }
 
-  function buildContextMenuItems(projectId: string): ContextMenuItem[] {
+  function buildContextMenuItems(projectPath: string): ContextMenuItem[] {
     const store = useBridgeStore.getState();
-    const isPinned = store.pinnedProjectIds.has(projectId);
+    const isPinned = store.pinnedPaths.has(projectPath);
     return [
       {
         label: isPinned ? "Unpin" : "Pin",
-        onClick: () => handlePin(projectId),
+        onClick: () => handlePin(projectPath),
       },
       {
         label: "Remove from sidebar",
         danger: true,
         onClick: () => {
-          sendProjectOptOut(projectId);
+          sendProjectOptOut(projectPath);
         },
       },
       {
@@ -204,8 +204,8 @@ export default function SessionSidebar() {
               onSelect={setActiveSessionId}
               onNew={handleNewSession}
               pinned={entry.pinned}
-              onPin={() => handlePin(entry.project.id)}
-              onContextMenu={(e) => handleContextMenu(e, entry.project.id)}
+              onPin={() => handlePin(entry.project.path)}
+              onContextMenu={(e) => handleContextMenu(e, entry.project.path)}
             />
           </div>
         ))}

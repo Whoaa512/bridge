@@ -409,13 +409,13 @@ func (s *Server) handleExtensionUIResponse(c *wsClient, raw []byte) {
 	s.sessions.Send(req.SessionID, req.Response)
 }
 
-type projectIDMsg struct {
-	ProjectID string `json:"projectId"`
+type projectPathMsg struct {
+	Path string `json:"path"`
 }
 
 func (s *Server) handleProjectOptIn(c *wsClient, raw []byte) {
-	var req projectIDMsg
-	if err := json.Unmarshal(raw, &req); err != nil || req.ProjectID == "" {
+	var req projectPathMsg
+	if err := json.Unmarshal(raw, &req); err != nil || req.Path == "" {
 		sendToClient(c, map[string]string{"type": "error", "error": "invalid project_opt_in"})
 		return
 	}
@@ -424,14 +424,14 @@ func (s *Server) handleProjectOptIn(c *wsClient, raw []byte) {
 		return
 	}
 	s.cfgMu.Lock()
-	s.cfg.AddFocusedProject(req.ProjectID)
+	s.cfg.AddFocusedProject(req.Path)
 	s.saveAndBroadcastConfig(c)
 	s.cfgMu.Unlock()
 }
 
 func (s *Server) handleProjectOptOut(c *wsClient, raw []byte) {
-	var req projectIDMsg
-	if err := json.Unmarshal(raw, &req); err != nil || req.ProjectID == "" {
+	var req projectPathMsg
+	if err := json.Unmarshal(raw, &req); err != nil || req.Path == "" {
 		sendToClient(c, map[string]string{"type": "error", "error": "invalid project_opt_out"})
 		return
 	}
@@ -440,14 +440,14 @@ func (s *Server) handleProjectOptOut(c *wsClient, raw []byte) {
 		return
 	}
 	s.cfgMu.Lock()
-	s.cfg.RemoveFocusedProject(req.ProjectID)
+	s.cfg.RemoveFocusedProject(req.Path)
 	s.saveAndBroadcastConfig(c)
 	s.cfgMu.Unlock()
 }
 
 func (s *Server) handleProjectPin(c *wsClient, raw []byte) {
-	var req projectIDMsg
-	if err := json.Unmarshal(raw, &req); err != nil || req.ProjectID == "" {
+	var req projectPathMsg
+	if err := json.Unmarshal(raw, &req); err != nil || req.Path == "" {
 		sendToClient(c, map[string]string{"type": "error", "error": "invalid project_pin"})
 		return
 	}
@@ -456,14 +456,14 @@ func (s *Server) handleProjectPin(c *wsClient, raw []byte) {
 		return
 	}
 	s.cfgMu.Lock()
-	s.cfg.AddPinnedProject(req.ProjectID)
+	s.cfg.AddPinnedProject(req.Path)
 	s.saveAndBroadcastConfig(c)
 	s.cfgMu.Unlock()
 }
 
 func (s *Server) handleProjectUnpin(c *wsClient, raw []byte) {
-	var req projectIDMsg
-	if err := json.Unmarshal(raw, &req); err != nil || req.ProjectID == "" {
+	var req projectPathMsg
+	if err := json.Unmarshal(raw, &req); err != nil || req.Path == "" {
 		sendToClient(c, map[string]string{"type": "error", "error": "invalid project_unpin"})
 		return
 	}
@@ -472,7 +472,7 @@ func (s *Server) handleProjectUnpin(c *wsClient, raw []byte) {
 		return
 	}
 	s.cfgMu.Lock()
-	s.cfg.RemovePinnedProject(req.ProjectID)
+	s.cfg.RemovePinnedProject(req.Path)
 	s.saveAndBroadcastConfig(c)
 	s.cfgMu.Unlock()
 }

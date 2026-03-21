@@ -6,9 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/cjwinslow/bridge/scan/internal/spec"
 )
 
 func TestOnboarding(t *testing.T) {
@@ -101,27 +98,27 @@ func TestExists(t *testing.T) {
 func TestFocusedProjects(t *testing.T) {
 	cfg := NewDefault([]string{"/code"})
 
-	if cfg.HasFocusedProject("project:a") {
+	if cfg.HasFocusedProject("/code/a") {
 		t.Error("expected false for empty focused")
 	}
 
-	cfg.AddFocusedProject("project:a")
-	if !cfg.HasFocusedProject("project:a") {
+	cfg.AddFocusedProject("/code/a")
+	if !cfg.HasFocusedProject("/code/a") {
 		t.Error("expected true after add")
 	}
 
-	cfg.AddFocusedProject("project:a")
+	cfg.AddFocusedProject("/code/a")
 	if len(cfg.FocusedProjects) != 1 {
 		t.Errorf("duplicate add: got %d, want 1", len(cfg.FocusedProjects))
 	}
 
-	cfg.AddFocusedProject("project:b")
+	cfg.AddFocusedProject("/code/b")
 	if len(cfg.FocusedProjects) != 2 {
 		t.Errorf("got %d, want 2", len(cfg.FocusedProjects))
 	}
 
-	cfg.RemoveFocusedProject("project:a")
-	if cfg.HasFocusedProject("project:a") {
+	cfg.RemoveFocusedProject("/code/a")
+	if cfg.HasFocusedProject("/code/a") {
 		t.Error("expected false after remove")
 	}
 	if len(cfg.FocusedProjects) != 1 {
@@ -132,22 +129,22 @@ func TestFocusedProjects(t *testing.T) {
 func TestPinnedProjects(t *testing.T) {
 	cfg := NewDefault([]string{"/code"})
 
-	if cfg.HasPinnedProject("project:a") {
+	if cfg.HasPinnedProject("/code/a") {
 		t.Error("expected false for empty pinned")
 	}
 
-	cfg.AddPinnedProject("project:a")
-	if !cfg.HasPinnedProject("project:a") {
+	cfg.AddPinnedProject("/code/a")
+	if !cfg.HasPinnedProject("/code/a") {
 		t.Error("expected true after add")
 	}
 
-	cfg.AddPinnedProject("project:a")
+	cfg.AddPinnedProject("/code/a")
 	if len(cfg.PinnedProjects) != 1 {
 		t.Errorf("duplicate add: got %d, want 1", len(cfg.PinnedProjects))
 	}
 
-	cfg.RemovePinnedProject("project:a")
-	if cfg.HasPinnedProject("project:a") {
+	cfg.RemovePinnedProject("/code/a")
+	if cfg.HasPinnedProject("/code/a") {
 		t.Error("expected false after remove")
 	}
 }
@@ -155,13 +152,13 @@ func TestPinnedProjects(t *testing.T) {
 func TestTogglePinProject(t *testing.T) {
 	cfg := NewDefault([]string{"/code"})
 
-	cfg.TogglePinProject("project:a")
-	if !cfg.HasPinnedProject("project:a") {
+	cfg.TogglePinProject("/code/a")
+	if !cfg.HasPinnedProject("/code/a") {
 		t.Error("expected pinned after first toggle")
 	}
 
-	cfg.TogglePinProject("project:a")
-	if cfg.HasPinnedProject("project:a") {
+	cfg.TogglePinProject("/code/a")
+	if cfg.HasPinnedProject("/code/a") {
 		t.Error("expected unpinned after second toggle")
 	}
 }
@@ -169,11 +166,11 @@ func TestTogglePinProject(t *testing.T) {
 func TestRemoveFocusedAlsoRemovesPinned(t *testing.T) {
 	cfg := NewDefault([]string{"/code"})
 
-	cfg.AddFocusedProject("project:a")
-	cfg.AddPinnedProject("project:a")
+	cfg.AddFocusedProject("/code/a")
+	cfg.AddPinnedProject("/code/a")
 
-	cfg.RemoveFocusedProject("project:a")
-	if cfg.HasPinnedProject("project:a") {
+	cfg.RemoveFocusedProject("/code/a")
+	if cfg.HasPinnedProject("/code/a") {
 		t.Error("expected pinned removed when focused removed")
 	}
 }
@@ -183,8 +180,8 @@ func TestFocusedProjectsPersistence(t *testing.T) {
 	t.Setenv("HOME", tmp)
 
 	cfg := NewDefault([]string{"/code"})
-	cfg.AddFocusedProject("project:a")
-	cfg.AddPinnedProject("project:a")
+	cfg.AddFocusedProject("/code/a")
+	cfg.AddPinnedProject("/code/a")
 	if err := cfg.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -193,84 +190,44 @@ func TestFocusedProjectsPersistence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if !loaded.HasFocusedProject("project:a") {
+	if !loaded.HasFocusedProject("/code/a") {
 		t.Error("focused project not persisted")
 	}
-	if !loaded.HasPinnedProject("project:a") {
+	if !loaded.HasPinnedProject("/code/a") {
 		t.Error("pinned project not persisted")
 	}
 }
 
-func TestSeedFocusedProjects(t *testing.T) {
+func TestLoadMigratesV1ProjectIds(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 
-	now := time.Now()
-	recent := now.Add(-3 * 24 * time.Hour)
-	stale := now.Add(-30 * 24 * time.Hour)
-
-	projects := []spec.Project{
-		{ID: "active-uncommitted", Kind: "standalone", Git: &spec.GitStatus{Uncommitted: 2, LastCommit: stale}},
-		{ID: "active-recent", Kind: "standalone", Git: &spec.GitStatus{LastCommit: recent}},
-		{ID: "stale-project", Kind: "standalone", Git: &spec.GitStatus{LastCommit: stale}},
-		{ID: "mono-child", Kind: "monorepo_child", Git: &spec.GitStatus{Uncommitted: 5, LastCommit: recent}},
-		{ID: "no-git", Kind: "standalone"},
-	}
-
 	cfg := NewDefault([]string{"/code"})
-	cfg.SeedFocusedProjects(projects)
-
-	if len(cfg.FocusedProjects) != 2 {
-		t.Fatalf("got %d focused, want 2: %v", len(cfg.FocusedProjects), cfg.FocusedProjects)
-	}
-	if !cfg.HasFocusedProject("active-uncommitted") {
-		t.Error("expected active-uncommitted to be focused")
-	}
-	if !cfg.HasFocusedProject("active-recent") {
-		t.Error("expected active-recent to be focused")
-	}
-	if cfg.HasFocusedProject("stale-project") {
-		t.Error("stale-project should not be focused")
-	}
-	if cfg.HasFocusedProject("mono-child") {
-		t.Error("monorepo_child should not be focused")
-	}
-	if cfg.HasFocusedProject("no-git") {
-		t.Error("no-git should not be focused")
-	}
-}
-
-func TestSeedFocusedProjectsNoopWhenPopulated(t *testing.T) {
-	cfg := NewDefault([]string{"/code"})
-	cfg.FocusedProjects = []string{"existing-project"}
-
-	projects := []spec.Project{
-		{ID: "active", Kind: "standalone", Git: &spec.GitStatus{Uncommitted: 1}},
-	}
-
-	cfg.SeedFocusedProjects(projects)
-
-	if len(cfg.FocusedProjects) != 1 || cfg.FocusedProjects[0] != "existing-project" {
-		t.Errorf("seed should be noop when populated, got %v", cfg.FocusedProjects)
-	}
-}
-
-func TestSeedFocusedProjectsSavesToDisk(t *testing.T) {
-	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
-
-	projects := []spec.Project{
-		{ID: "active", Kind: "standalone", Git: &spec.GitStatus{Uncommitted: 1}},
-	}
-
-	cfg := NewDefault([]string{"/code"})
-	cfg.SeedFocusedProjects(projects)
+	cfg.FocusedProjects = []string{"project:code/a", "project:code/b"}
+	cfg.PinnedProjects = []string{"project:code/a"}
+	cfg.Save()
 
 	loaded, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if !loaded.HasFocusedProject("active") {
-		t.Error("seeded project not persisted to disk")
+	if len(loaded.FocusedProjects) != 0 {
+		t.Errorf("expected focused cleared, got %v", loaded.FocusedProjects)
+	}
+	if len(loaded.PinnedProjects) != 0 {
+		t.Errorf("expected pinned cleared, got %v", loaded.PinnedProjects)
+	}
+}
+
+func TestAddFocusedProjectExpandsHome(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	cfg := NewDefault([]string{"/code"})
+	cfg.AddFocusedProject("~/code/bridge")
+
+	expected := filepath.Join(tmp, "code/bridge")
+	if !cfg.HasFocusedProject(expected) {
+		t.Errorf("expected %q, got %v", expected, cfg.FocusedProjects)
 	}
 }

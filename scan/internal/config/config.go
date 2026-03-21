@@ -6,9 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"time"
-
-	"github.com/cjwinslow/bridge/scan/internal/spec"
+	"strings"
 )
 
 type Config struct {
@@ -50,6 +48,13 @@ func Load() (*Config, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
+
+	if len(cfg.FocusedProjects) > 0 && strings.HasPrefix(cfg.FocusedProjects[0], "project:") {
+		cfg.FocusedProjects = []string{}
+		cfg.PinnedProjects = []string{}
+		cfg.Save()
+	}
+
 	return &cfg, nil
 }
 
@@ -89,6 +94,7 @@ func (c *Config) HasFocusedProject(id string) bool {
 }
 
 func (c *Config) AddFocusedProject(id string) {
+	id = expandHome(id)
 	if c.HasFocusedProject(id) {
 		return
 	}
@@ -121,36 +127,4 @@ func (c *Config) TogglePinProject(id string) {
 		return
 	}
 	c.AddPinnedProject(id)
-}
-
-func (c *Config) SeedFocusedProjects(projects []spec.Project) {
-	if len(c.FocusedProjects) > 0 {
-		return
-	}
-
-	cutoff := time.Now().Add(-14 * 24 * time.Hour)
-
-	for _, p := range projects {
-		if p.Kind == "monorepo_child" {
-			continue
-		}
-		if !isActive(p, cutoff) {
-			continue
-		}
-		c.FocusedProjects = append(c.FocusedProjects, p.ID)
-	}
-
-	if len(c.FocusedProjects) > 0 {
-		c.Save()
-	}
-}
-
-func isActive(p spec.Project, cutoff time.Time) bool {
-	if p.Git == nil {
-		return false
-	}
-	if p.Git.Uncommitted > 0 {
-		return true
-	}
-	return p.Git.LastCommit.After(cutoff)
 }

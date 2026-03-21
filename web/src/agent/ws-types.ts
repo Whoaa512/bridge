@@ -14,10 +14,10 @@ export type BridgeWSCommand =
   | { type: "sessions_list_request" }
   | { type: "pi_command"; sessionId: string; command: object }
   | { type: "extension_ui_response"; sessionId: string; response: object }
-  | { type: "project_opt_in"; projectId: string }
-  | { type: "project_opt_out"; projectId: string }
-  | { type: "project_pin"; projectId: string }
-  | { type: "project_unpin"; projectId: string };
+  | { type: "project_opt_in"; path: string }
+  | { type: "project_opt_out"; path: string }
+  | { type: "project_pin"; path: string }
+  | { type: "project_unpin"; path: string };
 
 export type BridgeWSEvent =
   | { type: "full_sync"; spec: unknown }

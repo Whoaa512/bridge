@@ -14,7 +14,7 @@ export default function ProjectSearch({ onClose }: ProjectSearchProps) {
   const listRef = useRef<HTMLDivElement>(null);
 
   const spec = useBridgeStore((s) => s.spec);
-  const focusedIds = useBridgeStore((s) => s.focusedProjectIds);
+  const focusedPaths = useBridgeStore((s) => s.focusedPaths);
 
   const results = useMemo(() => {
     const all = spec?.projects ?? [];
@@ -42,8 +42,8 @@ export default function ProjectSearch({ onClose }: ProjectSearchProps) {
   const selectProject = useCallback((project: Project) => {
     const store = useBridgeStore.getState();
 
-    if (!store.focusedProjectIds.has(project.id)) {
-      sendProjectOptIn(project.id);
+    if (!store.focusedPaths.has(project.path)) {
+      sendProjectOptIn(project.path);
     }
 
     sendSessionCreate(project.path, project.id);
@@ -99,7 +99,7 @@ export default function ProjectSearch({ onClose }: ProjectSearchProps) {
             <div style={styles.empty}>No projects found</div>
           )}
           {results.map((project, i) => {
-            const isFocused = focusedIds.has(project.id);
+            const isFocused = focusedPaths.has(project.path);
             return (
               <button
                 key={project.id}

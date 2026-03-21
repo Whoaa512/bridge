@@ -168,8 +168,8 @@ const ws = connectWS({
   },
   onConfigUpdate: (focusedProjects, pinnedProjects) => {
     const store = useBridgeStore.getState();
-    store.setFocusedProjects(focusedProjects);
-    store.setPinnedProjects(pinnedProjects);
+    store.setFocusedPaths(focusedProjects);
+    store.setPinnedPaths(pinnedProjects);
   },
 });
 

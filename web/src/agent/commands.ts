@@ -22,18 +22,18 @@ export function sendSessionDestroy(sessionId: string) {
   _ws?.send({ type: "session_destroy", sessionId });
 }
 
-export function sendProjectOptIn(projectId: string) {
-  _ws?.send({ type: "project_opt_in", projectId });
+export function sendProjectOptIn(path: string) {
+  _ws?.send({ type: "project_opt_in", path });
 }
 
-export function sendProjectOptOut(projectId: string) {
-  _ws?.send({ type: "project_opt_out", projectId });
+export function sendProjectOptOut(path: string) {
+  _ws?.send({ type: "project_opt_out", path });
 }
 
-export function sendProjectPin(projectId: string) {
-  _ws?.send({ type: "project_pin", projectId });
+export function sendProjectPin(path: string) {
+  _ws?.send({ type: "project_pin", path });
 }
 
-export function sendProjectUnpin(projectId: string) {
-  _ws?.send({ type: "project_unpin", projectId });
+export function sendProjectUnpin(path: string) {
+  _ws?.send({ type: "project_unpin", path });
 }
