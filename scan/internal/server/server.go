@@ -305,6 +305,8 @@ func (s *Server) handleWSMessage(c *wsClient, raw []byte) {
 		s.handleProjectPin(c, raw)
 	case "project_unpin":
 		s.handleProjectUnpin(c, raw)
+	case "session_history":
+		s.handleSessionHistory(c, raw)
 	default:
 		log.Printf("ws: unknown message type: %q", env.Type)
 	}
@@ -496,6 +498,32 @@ func (s *Server) handleProjectUnpin(c *wsClient, raw []byte) {
 	s.cfg.RemovePinnedProject(req.Path)
 	s.saveAndBroadcastConfig(c)
 	s.cfgMu.Unlock()
+}
+
+func (s *Server) handleSessionHistory(c *wsClient, raw []byte) {
+	var req projectPathMsg
+	if err := json.Unmarshal(raw, &req); err != nil || req.Path == "" {
+		sendToClient(c, map[string]string{"type": "error", "error": "invalid session_history"})
+		return
+	}
+
+	sessions, err := agent.ReadSessionHistory(req.Path)
+	if err != nil {
+		sendToClient(c, map[string]interface{}{
+			"type":  "error",
+			"error": fmt.Sprintf("read session history: %v", err),
+		})
+		return
+	}
+	if sessions == nil {
+		sessions = []agent.HistoricalSession{}
+	}
+
+	sendToClient(c, map[string]interface{}{
+		"type":     "session_history_results",
+		"path":     req.Path,
+		"sessions": sessions,
+	})
 }
 
 func (s *Server) handleProjectSearch(c *wsClient, raw []byte) {
