@@ -5,16 +5,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 )
 
 type Config struct {
-	SpecVersion     string            `json:"specVersion"`
-	ScanRoots       []string          `json:"scanRoots"`
-	Ignore          []string          `json:"ignore"`
-	Classifications map[string]string `json:"classifications"`
-	Priorities      map[string]int    `json:"priorities"`
-	Groups          map[string][]string `json:"groups"`
-	Services        Services          `json:"services"`
+	SpecVersion      string              `json:"specVersion"`
+	ScanRoots        []string            `json:"scanRoots"`
+	Ignore           []string            `json:"ignore"`
+	Classifications  map[string]string   `json:"classifications"`
+	Priorities       map[string]int      `json:"priorities"`
+	Groups           map[string][]string `json:"groups"`
+	Services         Services            `json:"services"`
+	FocusedProjects  []string            `json:"focusedProjects"`
+	PinnedProjects   []string            `json:"pinnedProjects"`
 }
 
 type Services struct {
@@ -73,5 +76,46 @@ func NewDefault(scanRoots []string) *Config {
 		Priorities:      map[string]int{},
 		Groups:          map[string][]string{},
 		Services:        Services{KnownPorts: map[string]string{}},
+		FocusedProjects: []string{},
+		PinnedProjects:  []string{},
 	}
+}
+
+func (c *Config) HasFocusedProject(id string) bool {
+	return slices.Contains(c.FocusedProjects, id)
+}
+
+func (c *Config) AddFocusedProject(id string) {
+	if c.HasFocusedProject(id) {
+		return
+	}
+	c.FocusedProjects = append(c.FocusedProjects, id)
+}
+
+func (c *Config) RemoveFocusedProject(id string) {
+	c.FocusedProjects = slices.DeleteFunc(c.FocusedProjects, func(s string) bool { return s == id })
+	c.RemovePinnedProject(id)
+}
+
+func (c *Config) HasPinnedProject(id string) bool {
+	return slices.Contains(c.PinnedProjects, id)
+}
+
+func (c *Config) AddPinnedProject(id string) {
+	if c.HasPinnedProject(id) {
+		return
+	}
+	c.PinnedProjects = append(c.PinnedProjects, id)
+}
+
+func (c *Config) RemovePinnedProject(id string) {
+	c.PinnedProjects = slices.DeleteFunc(c.PinnedProjects, func(s string) bool { return s == id })
+}
+
+func (c *Config) TogglePinProject(id string) {
+	if c.HasPinnedProject(id) {
+		c.RemovePinnedProject(id)
+		return
+	}
+	c.AddPinnedProject(id)
 }
