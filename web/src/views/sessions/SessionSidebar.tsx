@@ -4,6 +4,8 @@ import type { SessionInfo } from "../../agent/ws-types";
 import type { Project } from "../../core/types";
 import { sendSessionCreate } from "../../agent/commands";
 
+type ProjectEntry = { project: Project; sessions: SessionInfo[]; pinned: boolean };
+
 const STATE_COLORS: Record<string, string> = {
   idle: "#8b949e",
   streaming: "#58a6ff",
@@ -26,12 +28,13 @@ function SessionRow({ session, isActive, onClick }: {
   );
 }
 
-function ProjectGroup({ project, sessions, activeSessionId, onSelect, onNew }: {
+function ProjectGroup({ project, sessions, activeSessionId, onSelect, onNew, pinned }: {
   project: Project;
   sessions: SessionInfo[];
   activeSessionId: string | null;
   onSelect: (id: string) => void;
   onNew: (project: Project) => void;
+  pinned: boolean;
 }) {
   const expanded = useBridgeStore((s) => s.expandedProjects.has(project.id));
   const toggle = useBridgeStore((s) => s.toggleProjectExpanded);
@@ -47,6 +50,7 @@ function ProjectGroup({ project, sessions, activeSessionId, onSelect, onNew }: {
             transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
           }}>›</span>
           {!expanded && hasActive && <span style={styles.activeDot} />}
+          {pinned && <span style={styles.pinnedStar}>★</span>}
           <span style={styles.projectName}>{project.name}</span>
           <span style={styles.sessionCount}>{sessions.length}</span>
         </button>
@@ -81,11 +85,15 @@ export default function SessionSidebar() {
   const activeSessionId = useBridgeStore((s) => s.activeSessionId);
   const setActiveSessionId = useBridgeStore((s) => s.setActiveSessionId);
   const spec = useBridgeStore((s) => s.spec);
+  const focusedIds = useBridgeStore((s) => s.focusedProjectIds);
+  const pinnedIds = useBridgeStore((s) => s.pinnedProjectIds);
 
-  const projects = spec?.projects ?? [];
   const sessionList = Array.from(sessions.values());
 
-  const { projectsWithSessions, projectsWithout } = useMemo(() => {
+  const sortedEntries = useMemo(() => {
+    const all = spec?.projects ?? [];
+    const filtered = focusedIds.size === 0 ? all : all.filter((p) => focusedIds.has(p.id));
+
     const sessionsByProject = new Map<string, SessionInfo[]>();
     for (const s of sessionList) {
       const key = s.projectId || "__unlinked";
@@ -94,22 +102,25 @@ export default function SessionSidebar() {
       sessionsByProject.set(key, list);
     }
 
-    const withSessions: { project: Project; sessions: SessionInfo[] }[] = [];
-    const without: Project[] = [];
-    const seen = new Set<string>();
+    const entries: ProjectEntry[] = filtered.map((project) => ({
+      project,
+      sessions: sessionsByProject.get(project.id) ?? [],
+      pinned: pinnedIds.has(project.id),
+    }));
 
-    for (const project of projects) {
-      const pSessions = sessionsByProject.get(project.id);
-      if (pSessions && pSessions.length > 0) {
-        withSessions.push({ project, sessions: pSessions });
-        seen.add(project.id);
-      } else {
-        without.push(project);
-      }
-    }
+    entries.sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      const aHas = a.sessions.length > 0;
+      const bHas = b.sessions.length > 0;
+      if (aHas !== bHas) return aHas ? -1 : 1;
+      return a.project.name.localeCompare(b.project.name);
+    });
 
-    return { projectsWithSessions: withSessions, projectsWithout: without };
-  }, [projects, sessionList]);
+    return entries;
+  }, [spec, focusedIds, pinnedIds, sessionList]);
+
+  const pinnedCount = sortedEntries.filter((e) => e.pinned).length;
+  const hasDivider = pinnedCount > 0 && pinnedCount < sortedEntries.length;
 
   function handleNewSession(project: Project) {
     const store = useBridgeStore.getState();
@@ -122,31 +133,21 @@ export default function SessionSidebar() {
   return (
     <div style={styles.sidebar}>
       <div style={styles.header}>
-        <span style={styles.headerLabel}>Projects</span>
+        <span style={styles.headerLabel}>Projects ({sortedEntries.length})</span>
       </div>
       <div style={styles.list}>
-        {projectsWithSessions.map(({ project, sessions: pSessions }) => (
-          <ProjectGroup
-            key={project.id}
-            project={project}
-            sessions={pSessions}
-            activeSessionId={activeSessionId}
-            onSelect={setActiveSessionId}
-            onNew={handleNewSession}
-          />
-        ))}
-        {projectsWithout.length > 0 && projectsWithSessions.length > 0 && (
-          <div style={styles.divider} />
-        )}
-        {projectsWithout.map((project) => (
-          <ProjectGroup
-            key={project.id}
-            project={project}
-            sessions={[]}
-            activeSessionId={activeSessionId}
-            onSelect={setActiveSessionId}
-            onNew={handleNewSession}
-          />
+        {sortedEntries.map((entry, i) => (
+          <div key={entry.project.id}>
+            {hasDivider && i === pinnedCount && <div style={styles.divider} />}
+            <ProjectGroup
+              project={entry.project}
+              sessions={entry.sessions}
+              activeSessionId={activeSessionId}
+              onSelect={setActiveSessionId}
+              onNew={handleNewSession}
+              pinned={entry.pinned}
+            />
+          </div>
         ))}
       </div>
     </div>
@@ -224,6 +225,12 @@ const styles = {
     background: "#58a6ff",
     flexShrink: 0,
     marginLeft: -2,
+  },
+  pinnedStar: {
+    color: "#d29922",
+    fontSize: 10,
+    marginRight: 2,
+    flexShrink: 0,
   },
   projectName: {
     flex: 1,
