@@ -12,8 +12,8 @@ beforeEach(() => {
 });
 
 describe("viewFromPath", () => {
-  test("/ maps to complexity", () => {
-    expect(viewFromPath("/")).toBe("complexity");
+  test("/ maps to sessions", () => {
+    expect(viewFromPath("/")).toBe("sessions");
   });
 
   test("/workspace maps to workspace", () => {
@@ -24,12 +24,12 @@ describe("viewFromPath", () => {
     expect(viewFromPath("/colony")).toBe("colony");
   });
 
-  test("/sessions maps to sessions", () => {
-    expect(viewFromPath("/sessions")).toBe("sessions");
+  test("/complexity maps to complexity", () => {
+    expect(viewFromPath("/complexity")).toBe("complexity");
   });
 
-  test("unknown path falls back to complexity", () => {
-    expect(viewFromPath("/unknown")).toBe("complexity");
+  test("unknown path falls back to sessions", () => {
+    expect(viewFromPath("/unknown")).toBe("sessions");
   });
 });
 
@@ -45,9 +45,15 @@ describe("pushView", () => {
     expect(pushStateMock).not.toHaveBeenCalled();
   });
 
-  test("pushes / for complexity", () => {
+  test("pushes / for sessions", () => {
     (globalThis as any).window.location.pathname = "/workspace";
-    pushView("complexity");
+    pushView("sessions");
     expect(pushStateMock).toHaveBeenCalledWith(null, "", "/");
+  });
+
+  test("pushes /complexity for complexity", () => {
+    (globalThis as any).window.location.pathname = "/";
+    pushView("complexity");
+    expect(pushStateMock).toHaveBeenCalledWith(null, "", "/complexity");
   });
 });

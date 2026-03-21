@@ -46,6 +46,9 @@ export interface BridgeStore {
 
   extensionUIRequest: { sessionId: string; request: ExtensionUIRequest } | null;
   setExtensionUIRequest: (req: { sessionId: string; request: ExtensionUIRequest } | null) => void;
+
+  expandedProjects: Set<string>;
+  toggleProjectExpanded: (projectId: string) => void;
 }
 
 export const useBridgeStore = create<BridgeStore>((set, get) => ({
@@ -137,4 +140,15 @@ export const useBridgeStore = create<BridgeStore>((set, get) => ({
 
   extensionUIRequest: null,
   setExtensionUIRequest: (req) => set({ extensionUIRequest: req }),
+
+  expandedProjects: new Set<string>(),
+  toggleProjectExpanded: (projectId) => {
+    const next = new Set(get().expandedProjects);
+    if (next.has(projectId)) {
+      next.delete(projectId);
+    } else {
+      next.add(projectId);
+    }
+    set({ expandedProjects: next });
+  },
 }));

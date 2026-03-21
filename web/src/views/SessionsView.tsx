@@ -1,16 +1,29 @@
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useCallback } from "react";
 import { useBridgeStore } from "../store";
 import { sendCommand } from "../agent/commands";
 import SessionSidebar from "./sessions/SessionSidebar";
 import ChatArea from "./sessions/ChatArea";
 import Composer from "./sessions/Composer";
-import NewSessionDialog from "./sessions/NewSessionDialog";
 import ExtensionDialog from "./sessions/ExtensionDialog";
+
+function EmptyState() {
+  return (
+    <div style={styles.empty}>
+      <div style={styles.emptyContent}>
+        <div style={styles.emptyIcon}>⌘</div>
+        <p style={styles.emptyTitle}>No active session</p>
+        <p style={styles.emptyHint}>
+          Click <strong>+</strong> on a project to start a session,
+          or select an existing one from the sidebar.
+        </p>
+      </div>
+    </div>
+  );
+}
 
 export default function SessionsView() {
   const activeSessionId = useBridgeStore((s) => s.activeSessionId);
   const sessions = useBridgeStore((s) => s.sessions);
-  const [showNewDialog, setShowNewDialog] = useState(false);
 
   const activeSession = activeSessionId ? sessions.get(activeSessionId) : null;
 
@@ -49,12 +62,10 @@ export default function SessionsView() {
 
   return (
     <div style={styles.container}>
-      <SessionSidebar onNewSession={() => setShowNewDialog(true)} />
+      <SessionSidebar />
       <div style={styles.main}>
         {!activeSession ? (
-          <div style={styles.empty}>
-            No active sessions. Create one to start.
-          </div>
+          <EmptyState />
         ) : (
           <>
             <ChatArea session={activeSession} />
@@ -62,9 +73,6 @@ export default function SessionsView() {
           </>
         )}
       </div>
-      {showNewDialog && (
-        <NewSessionDialog onClose={() => setShowNewDialog(false)} />
-      )}
       <ExtensionDialog />
     </div>
   );
@@ -88,7 +96,26 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     height: "100%",
+  },
+  emptyContent: {
+    textAlign: "center" as const,
+    maxWidth: 320,
+  },
+  emptyIcon: {
+    fontSize: 32,
+    color: "#30363d",
+    marginBottom: 12,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: 600,
     color: "#8b949e",
-    fontSize: 14,
+    margin: "0 0 8px",
+  },
+  emptyHint: {
+    fontSize: 13,
+    color: "#484f58",
+    lineHeight: 1.5,
+    margin: 0,
   },
 };
