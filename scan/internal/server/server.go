@@ -93,6 +93,10 @@ func WithOnConfigChange(fn func()) Option {
 	return func(s *Server) { s.onConfigChange = fn }
 }
 
+func (s *Server) SetOnConfigChange(fn func()) {
+	s.onConfigChange = fn
+}
+
 func isLocalOrigin(origin string) bool {
 	return strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1")
 }

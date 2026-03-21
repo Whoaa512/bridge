@@ -279,6 +279,21 @@ func runServe() {
 	}
 	w.SetScanning(false)
 
+	srv.SetOnConfigChange(func() {
+		updated := scanWithConfig(cfg, cache)
+		if err := spec.Emit(updated); err != nil {
+			fmt.Fprintf(os.Stderr, "error writing spec on config change: %v\n", err)
+			return
+		}
+		srv.SetSpec(updated)
+		for _, p := range updated.Projects {
+			if p.Git != nil {
+				w.WatchProject(p.Path)
+			}
+		}
+		fmt.Fprintf(os.Stderr, "Config change rescan: %d projects\n", len(updated.Projects))
+	})
+
 	go func() {
 		fmt.Fprintf(os.Stderr, "Serving on :%d\n", port)
 		if err := srv.Start(); err != nil && err != http.ErrServerClosed {
