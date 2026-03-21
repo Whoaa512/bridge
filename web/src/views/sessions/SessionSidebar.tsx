@@ -107,14 +107,12 @@ export default function SessionSidebar() {
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; projectId: string } | null>(null);
 
-  const sessionList = Array.from(sessions.values());
-
   const sortedEntries = useMemo(() => {
     const all = spec?.projects ?? [];
     const filtered = focusedIds.size === 0 ? all : all.filter((p) => focusedIds.has(p.id));
 
     const sessionsByProject = new Map<string, SessionInfo[]>();
-    for (const s of sessionList) {
+    for (const s of sessions.values()) {
       const key = s.projectId || "__unlinked";
       const list = sessionsByProject.get(key) ?? [];
       list.push(s);
@@ -136,7 +134,7 @@ export default function SessionSidebar() {
     });
 
     return entries;
-  }, [spec, focusedIds, pinnedIds, sessionList]);
+  }, [spec, focusedIds, pinnedIds, sessions]);
 
   const pinnedCount = sortedEntries.filter((e) => e.pinned).length;
   const hasDivider = pinnedCount > 0 && pinnedCount < sortedEntries.length;
@@ -157,7 +155,6 @@ export default function SessionSidebar() {
     } else {
       sendProjectPin(projectId);
     }
-    store.togglePinProject(projectId);
   }
 
   function handleContextMenu(e: React.MouseEvent, projectId: string) {
@@ -178,7 +175,6 @@ export default function SessionSidebar() {
         danger: true,
         onClick: () => {
           sendProjectOptOut(projectId);
-          store.removeFocusedProject(projectId);
         },
       },
       {

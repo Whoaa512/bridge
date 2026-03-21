@@ -44,7 +44,6 @@ export default function ProjectSearch({ onClose }: ProjectSearchProps) {
 
     if (!store.focusedProjectIds.has(project.id)) {
       sendProjectOptIn(project.id);
-      store.addFocusedProject(project.id);
     }
 
     sendSessionCreate(project.path, project.id);

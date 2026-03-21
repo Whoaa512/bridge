@@ -39,6 +39,7 @@ type Server struct {
 	wsMu    sync.Mutex
 	clients []*wsClient
 
+	cfgMu    sync.Mutex
 	sessions *agent.SessionManager
 	cfg      *config.Config
 }
@@ -422,8 +423,10 @@ func (s *Server) handleProjectOptIn(c *wsClient, raw []byte) {
 		sendToClient(c, map[string]string{"type": "error", "error": "config not available"})
 		return
 	}
+	s.cfgMu.Lock()
 	s.cfg.AddFocusedProject(req.ProjectID)
 	s.saveAndBroadcastConfig(c)
+	s.cfgMu.Unlock()
 }
 
 func (s *Server) handleProjectOptOut(c *wsClient, raw []byte) {
@@ -436,8 +439,10 @@ func (s *Server) handleProjectOptOut(c *wsClient, raw []byte) {
 		sendToClient(c, map[string]string{"type": "error", "error": "config not available"})
 		return
 	}
+	s.cfgMu.Lock()
 	s.cfg.RemoveFocusedProject(req.ProjectID)
 	s.saveAndBroadcastConfig(c)
+	s.cfgMu.Unlock()
 }
 
 func (s *Server) handleProjectPin(c *wsClient, raw []byte) {
@@ -450,8 +455,10 @@ func (s *Server) handleProjectPin(c *wsClient, raw []byte) {
 		sendToClient(c, map[string]string{"type": "error", "error": "config not available"})
 		return
 	}
+	s.cfgMu.Lock()
 	s.cfg.AddPinnedProject(req.ProjectID)
 	s.saveAndBroadcastConfig(c)
+	s.cfgMu.Unlock()
 }
 
 func (s *Server) handleProjectUnpin(c *wsClient, raw []byte) {
@@ -464,8 +471,10 @@ func (s *Server) handleProjectUnpin(c *wsClient, raw []byte) {
 		sendToClient(c, map[string]string{"type": "error", "error": "config not available"})
 		return
 	}
+	s.cfgMu.Lock()
 	s.cfg.RemovePinnedProject(req.ProjectID)
 	s.saveAndBroadcastConfig(c)
+	s.cfgMu.Unlock()
 }
 
 func (s *Server) saveAndBroadcastConfig(c *wsClient) {
@@ -498,10 +507,18 @@ func (s *Server) broadcastConfigUpdate() {
 }
 
 func marshalConfigUpdate(cfg *config.Config) []byte {
+	focused := cfg.FocusedProjects
+	if focused == nil {
+		focused = []string{}
+	}
+	pinned := cfg.PinnedProjects
+	if pinned == nil {
+		pinned = []string{}
+	}
 	data, err := json.Marshal(map[string]interface{}{
 		"type":            "config_update",
-		"focusedProjects": cfg.FocusedProjects,
-		"pinnedProjects":  cfg.PinnedProjects,
+		"focusedProjects": focused,
+		"pinnedProjects":  pinned,
 	})
 	if err != nil {
 		log.Printf("ws: marshal config_update error: %v", err)
