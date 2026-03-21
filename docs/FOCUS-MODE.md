@@ -1,144 +1,69 @@
 # Bridge Focus Mode — Plan
 
-> Transform Bridge from "see everything" firehose → focused workstation with opted-in projects.
+> Only scan what you explicitly add. Everything else doesn't exist.
 
-## Problem
+## Problem (v2)
 
-725 scanned projects in sidebar. Only ~23 active. Most are cloned-to-read/examples. The sidebar is unusable noise.
+v1 auto-seeded 58 projects from "activity in 14 days" heuristic — still too many. Fundamental issue: scanning 725 repos then filtering is backwards. Scanner should only scan what you care about.
 
-## Design Decisions
+## Model Flip
 
-### Tab Structure
-| Tab | Key | Path | What |
-|-----|-----|------|------|
-| **Sessions** | 1 | `/` | Sidebar + chat (daily driver) |
-| **Workspace** | 2 | `/workspace` | Dashboard of opted-in projects |
-| **Complexity** | 3 | `/complexity` | Per-project view, remembers last-viewed project. Stays as tab. |
+**Old**: Scan everything → filter in UI
+**New**: Only scan `focusedProjects` from config → clean by default
 
-**Colony: removed** from TABS and router. Canvas code stays (Complexity uses it).
+- `~/.bridge/config.json` `focusedProjects` is the source of truth for what gets scanned
+- Scanner walks only those paths (no more `scanRoots` → `discover.Walk()` → 725 repos)
+- ⌘K adds projects by path (from filesystem or known git repos)
+- Session history hydrated from `~/.pi/agent/sessions/` per-project
 
-> _Treemaps are likely not the long-term complexity viz — too coarse-grained for capturing complexity well. But keep Complexity tab functional for now._
+## Implementation
 
-### Opted-In Projects
-- New concept: **"my projects"** — subset of scanned projects the user explicitly opts in to
-- Stored in `~/.bridge/config.json` as `focusedProjects: string[]` (array of spec project IDs, e.g. `"project:code/bridge"`)
-- Sidebar only shows opted-in projects
-- Workspace only shows opted-in projects
-- Cmd+K search searches ALL scanned projects (for adding new ones)
-- **Auto-opt-in on first run**: projects with uncommitted changes or activity in last 14 days are auto-added (no onboarding overlay)
+### Step 1: Nuke auto-seed, clear focusedProjects
+- Remove `SeedFocusedProjects()` from config and main.go
+- Set `focusedProjects: []` in existing config (one-time reset)
+- Scanner only scans projects in `focusedProjects` list
 
-### Sidebar Sort Order
-1. **Pinned** projects (manual, sticky at top)
-2. **By session recency** — most recently used session floats up
-3. Projects with no sessions at bottom, alphabetical
+### Step 2: Scanner only scans focused projects
+- `focusedProjects` stores absolute paths (not IDs)
+- New `discover.BuildSpecForPaths(paths []string)` — skips Walk, directly processes each path
+- Falls back to full scan if focusedProjects is empty? Or just returns empty spec? (empty is correct)
+- Keep `scanRoots` in config for ⌘K project discovery (searching for repos to add)
 
-### Pinning
-- Stored in `~/.bridge/config.json` as `pinnedProjects: string[]`
-- Pin/unpin via hover star icon + right-click context menu
+### Step 3: ⌘K searches filesystem for git repos
+- ⌘K overlay changes: instead of searching spec.projects (which is now tiny), search for git repos under scanRoots
+- Go server: new WS command `project_search` → walks scanRoots, returns matching repos
+- Or: pre-build a lightweight index of known repos (just paths + names) on startup, serve via WS
 
-### Project Management UX
-- **Hover buttons**: pin/star icon on hover (quick actions)
-- **Right-click context menu**: Pin/Unpin, Remove project, View complexity (full actions)
-- Both available on sidebar project entries
-
-## Implementation Steps
-
-### Step 1: Config model for opted-in + pinned projects
-- Extend `~/.bridge/config.json` schema: add `focusedProjects: string[]` and `pinnedProjects: string[]`
-- Go: read/write these fields in config loader
-- WS: new command types `project_opt_in`, `project_opt_out`, `project_pin`, `project_unpin`
-- Go server handles these by updating config.json atomically
-- **Files**: `scan/internal/config/config.go`, `scan/internal/server/ws.go`
-
-### Step 2: Auto-opt-in active projects on first run
-- After scan completes, if `focusedProjects` is empty in config:
-  - Find projects with uncommitted changes OR last commit within 14 days
-  - Exclude monorepo children (parent already represents)
-  - Write these IDs to `focusedProjects` in config
-- This seeds a useful starting set without any onboarding UI
-- **Files**: `scan/internal/config/config.go`, `scan/cmd/bridge/` or `scan/internal/server/`
-
-### Step 3: Expose opted-in projects to web
-- New WS event `config_update` that pushes config changes to browser
-- Store gets `focusedProjectIds: Set<string>` and `pinnedProjectIds: Set<string>`
-- Derive `myProjects` from `spec.projects.filter(p => focusedIds.has(p.id))`
-- **Files**: `web/src/store.ts`, `web/src/main.tsx`, `web/src/agent/ws-types.ts`
-
-### Step 4: Filter sidebar to opted-in projects only
-- SessionSidebar: filter projects to `myProjects` instead of all
-- Sort: pinned first, then by most-recent-session timestamp, then alphabetical
-- Track `lastSessionAt` per project in store (updated when session created/events received)
-- **Files**: `web/src/views/sessions/SessionSidebar.tsx`, `web/src/store.ts`
-
-### Step 5: Cmd+K project search
-- Overlay triggered by Cmd+K (or click "Add project" in sidebar)
-- Searches ALL scanned projects by name
-- Selecting a non-opted-in project → opts it in + creates session
-- Selecting an opted-in project → creates session (or focuses existing)
-- **Files**: new `web/src/views/sessions/ProjectSearch.tsx`, update `web/src/App.tsx`
-
-### Step 6: Remove Colony tab
-- Remove Colony from TABS array and router
-- Keep Complexity tab — shows last-viewed project (eventually gets a project picker)
-- Canvas code stays, scoped to single-project view
-- **Files**: `web/src/App.tsx`, `web/src/router.ts`
-
-### Step 7: Filter Workspace to opted-in projects
-- WorkspaceView uses `myProjects` instead of all projects
-- Attention bar only computes for opted-in projects
-- "Add project" button in Workspace links to Cmd+K search
-- **Files**: `web/src/views/WorkspaceView.tsx`
-
-### Step 8: Sidebar project management
-- Hover-reveal star/pin icon on project rows
-- Right-click custom context menu: Pin/Unpin, Remove project, View complexity
-- "Add project" button at bottom of sidebar (opens Cmd+K)
-- **Files**: `web/src/views/sessions/SessionSidebar.tsx`, new `web/src/ui/ContextMenu.tsx`
+### Step 4: Session history hydration from ~/.pi/agent/sessions
+- Go server reads `~/.pi/agent/sessions/` directory structure
+- Dir name format: `--Users-cj_winslow-code-bridge--` → path `/Users/cj_winslow/code/bridge`
+- JSONL files: first line has `{"type":"session","id":"...","timestamp":"...","cwd":"..."}`
+- For each focused project, find matching session dir, list sessions
+- Send historical sessions to web (distinct from active pi sessions)
+- Web shows them in sidebar under each project
 
 ## Data Model
 
-### ~/.bridge/config.json additions
+### ~/.bridge/config.json
 ```json
 {
   "scanRoots": ["~/code", "~/work"],
-  "focusedProjects": ["project:code/bridge", "project:work/twig", "project:work/ergo"],
-  "pinnedProjects": ["project:code/bridge"]
+  "focusedProjects": ["/Users/cj_winslow/code/bridge", "/Users/cj_winslow/work/twig"],
+  "pinnedProjects": ["/Users/cj_winslow/code/bridge"]
 }
 ```
 
-### Store additions
-```typescript
-focusedProjectIds: Set<string>;
-pinnedProjectIds: Set<string>;
-lastSessionAt: Map<string, number>;  // projectId → timestamp
-addFocusedProject: (id: string) => void;
-removeFocusedProject: (id: string) => void;
-togglePinProject: (id: string) => void;
+Note: focusedProjects now stores absolute paths, not project IDs. Simpler, no indirection.
+
+### Session history
+```
+~/.pi/agent/sessions/
+  --Users-cj_winslow-code-bridge--/
+    2026-03-19T00-03-49-756Z_dc36b8b7.jsonl   ← each file = 1 session
+    2026-03-20T15-30-00-000Z_abc12345.jsonl
 ```
 
-### WS protocol additions
-```jsonc
-// Browser → Server
-{"type": "project_opt_in", "projectId": "project:code/bridge"}
-{"type": "project_opt_out", "projectId": "project:code/bridge"}
-{"type": "project_pin", "projectId": "project:code/bridge"}
-{"type": "project_unpin", "projectId": "project:code/bridge"}
-
-// Server → Browser  
-{"type": "config_update", "focusedProjects": [...], "pinnedProjects": [...]}
+Each JSONL first line:
+```json
+{"type":"session","version":3,"id":"dc36b8b7-...","timestamp":"2026-03-19T00:03:49.756Z","cwd":"/Users/cj_winslow/code/bridge"}
 ```
-
-## What We're NOT Doing (yet)
-- Onboarding overlay (auto-opt-in handles first run; Cmd+K for manual adds)
-- Session resume from pi's persisted sessions (needs pi RPC `list_sessions`)
-- Session search within projects
-- Complexity project picker (Complexity tab just shows last-viewed project)
-- Better complexity visualization (treemaps are placeholder)
-- Sound effects
-- Fractal zoom
-
-## Consensus Notes
-- **grug-architect**: Keep config in ~/.bridge/config.json, not localStorage — survives browser clears, single source of truth
-- **product-owner**: Auto-opt-in active repos on first run removes need for onboarding overlay. Cmd+K is the universal add mechanism.
-- **code-critic**: Canvas code stays for Complexity. Safest to remove Colony tab first (low risk), then add opt-in model (medium risk), then Cmd+K (new code, no risk to existing)
-- **All agree**: Don't touch Go scanner — it still scans everything. Filtering is purely a web UI concern. Config stores which projects to show.
