@@ -188,6 +188,15 @@ func runServe() {
 
 	var opts []server.Option
 	opts = append(opts, server.WithConfig(cfg))
+
+	walkResult := discover.Walk(cfg.ScanRoots, cfg.Ignore)
+	repoIndex := make([]server.RepoEntry, 0, len(walkResult.Projects))
+	for _, p := range walkResult.Projects {
+		repoIndex = append(repoIndex, server.RepoEntry{Name: p.Name, Path: p.Path})
+	}
+	opts = append(opts, server.WithRepoIndex(repoIndex))
+	fmt.Fprintf(os.Stderr, "Indexed %d repos for ⌘K search\n", len(repoIndex))
+
 	if webDir != "" {
 		fmt.Fprintf(os.Stderr, "Serving web UI from %s\n", webDir)
 		opts = append(opts, server.WithWebDir(webDir))
