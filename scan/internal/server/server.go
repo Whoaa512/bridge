@@ -28,6 +28,11 @@ type wsClient struct {
 	send chan []byte
 }
 
+type RepoEntry struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
 type Server struct {
 	mu       sync.RWMutex
 	current  *spec.BridgeSpec
@@ -43,6 +48,7 @@ type Server struct {
 	sessions       *agent.SessionManager
 	cfg            *config.Config
 	onConfigChange func()
+	repoIndex      []RepoEntry
 }
 
 var upgrader = websocket.Upgrader{
@@ -91,6 +97,10 @@ func WithConfig(cfg *config.Config) Option {
 
 func WithOnConfigChange(fn func()) Option {
 	return func(s *Server) { s.onConfigChange = fn }
+}
+
+func WithRepoIndex(repos []RepoEntry) Option {
+	return func(s *Server) { s.repoIndex = repos }
 }
 
 func (s *Server) SetOnConfigChange(fn func()) {
@@ -289,6 +299,8 @@ func (s *Server) handleWSMessage(c *wsClient, raw []byte) {
 		s.handleProjectOptIn(c, raw)
 	case "project_opt_out":
 		s.handleProjectOptOut(c, raw)
+	case "project_search":
+		s.handleProjectSearch(c, raw)
 	case "project_pin":
 		s.handleProjectPin(c, raw)
 	case "project_unpin":
@@ -484,6 +496,35 @@ func (s *Server) handleProjectUnpin(c *wsClient, raw []byte) {
 	s.cfg.RemovePinnedProject(req.Path)
 	s.saveAndBroadcastConfig(c)
 	s.cfgMu.Unlock()
+}
+
+func (s *Server) handleProjectSearch(c *wsClient, raw []byte) {
+	var req struct {
+		Query string `json:"query"`
+	}
+	if err := json.Unmarshal(raw, &req); err != nil {
+		sendToClient(c, map[string]string{"type": "error", "error": "invalid project_search"})
+		return
+	}
+
+	query := strings.ToLower(req.Query)
+	var results []RepoEntry
+	for _, r := range s.repoIndex {
+		if strings.Contains(strings.ToLower(r.Name), query) || strings.Contains(strings.ToLower(r.Path), query) {
+			results = append(results, r)
+			if len(results) >= 30 {
+				break
+			}
+		}
+	}
+	if results == nil {
+		results = []RepoEntry{}
+	}
+
+	sendToClient(c, map[string]interface{}{
+		"type":    "project_search_results",
+		"results": results,
+	})
 }
 
 func (s *Server) saveAndBroadcastConfig(c *wsClient) {

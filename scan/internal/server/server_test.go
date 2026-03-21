@@ -655,3 +655,76 @@ func TestWSProjectOptInBroadcastToAll(t *testing.T) {
 		t.Errorf("conn2 type = %v, want config_update", msg2["type"])
 	}
 }
+
+func TestWSProjectSearch(t *testing.T) {
+	index := []RepoEntry{
+		{Name: "bridge", Path: "/code/bridge"},
+		{Name: "dotfiles", Path: "/code/dotfiles"},
+		{Name: "my-app", Path: "/work/my-app"},
+	}
+	srv := New(0, WithRepoIndex(index))
+	srv.SetSpec(testSpec())
+	conn := wsConnect(t, srv)
+	readWSMsg(t, conn)
+
+	t.Run("matches by name", func(t *testing.T) {
+		sendWSMsg(t, conn, map[string]string{"type": "project_search", "query": "bridge"})
+		msg := readWSMsg(t, conn)
+
+		if msg["type"] != "project_search_results" {
+			t.Fatalf("type = %v, want project_search_results", msg["type"])
+		}
+		results := msg["results"].([]interface{})
+		if len(results) != 1 {
+			t.Fatalf("results = %d, want 1", len(results))
+		}
+		r := results[0].(map[string]interface{})
+		if r["name"] != "bridge" {
+			t.Errorf("name = %v", r["name"])
+		}
+	})
+
+	t.Run("matches by path", func(t *testing.T) {
+		sendWSMsg(t, conn, map[string]string{"type": "project_search", "query": "/work/"})
+		msg := readWSMsg(t, conn)
+
+		results := msg["results"].([]interface{})
+		if len(results) != 1 {
+			t.Fatalf("results = %d, want 1", len(results))
+		}
+		r := results[0].(map[string]interface{})
+		if r["name"] != "my-app" {
+			t.Errorf("name = %v", r["name"])
+		}
+	})
+
+	t.Run("empty query returns all", func(t *testing.T) {
+		sendWSMsg(t, conn, map[string]string{"type": "project_search", "query": ""})
+		msg := readWSMsg(t, conn)
+
+		results := msg["results"].([]interface{})
+		if len(results) != 3 {
+			t.Errorf("results = %d, want 3", len(results))
+		}
+	})
+
+	t.Run("no match returns empty array", func(t *testing.T) {
+		sendWSMsg(t, conn, map[string]string{"type": "project_search", "query": "zzzznothing"})
+		msg := readWSMsg(t, conn)
+
+		results := msg["results"].([]interface{})
+		if len(results) != 0 {
+			t.Errorf("results = %d, want 0", len(results))
+		}
+	})
+
+	t.Run("case insensitive", func(t *testing.T) {
+		sendWSMsg(t, conn, map[string]string{"type": "project_search", "query": "BRIDGE"})
+		msg := readWSMsg(t, conn)
+
+		results := msg["results"].([]interface{})
+		if len(results) != 1 {
+			t.Errorf("results = %d, want 1", len(results))
+		}
+	})
+}
