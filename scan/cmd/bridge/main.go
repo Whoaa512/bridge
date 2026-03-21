@@ -167,8 +167,10 @@ func runServe() {
 		os.Exit(1)
 	}
 
+	cache := watch.NewCache()
+
 	fmt.Fprintf(os.Stderr, "Scanning...\n")
-	s := discover.BuildSpec(cfg, nil)
+	s := discover.BuildSpec(cfg, cache)
 	fmt.Fprintf(os.Stderr, "Found %d projects\n", len(s.Projects))
 
 	if err := spec.Emit(s); err != nil {
@@ -240,8 +242,6 @@ func runServe() {
 			}
 		}
 	}
-
-	cache := watch.NewCache()
 	var w *watch.Watcher
 	w, err = watch.NewWatcher(cache, func(projectPath string) {
 		fmt.Fprintf(os.Stderr, "Rescan triggered by %s\n", projectPath)
