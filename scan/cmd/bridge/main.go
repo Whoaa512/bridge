@@ -91,10 +91,7 @@ func doScan(cfg *config.Config) *spec.BridgeSpec {
 }
 
 func scanWithConfig(cfg *config.Config, cache *watch.Cache) *spec.BridgeSpec {
-	if len(cfg.FocusedProjects) > 0 {
-		return discover.BuildSpecForPaths(cfg.FocusedProjects, cfg, cache)
-	}
-	return discover.BuildSpec(cfg, cache)
+	return discover.BuildSpecForPaths(cfg.FocusedProjects, cfg, cache)
 }
 
 func runScan() {

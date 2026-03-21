@@ -140,7 +140,7 @@ export default function SessionSidebar() {
 
   const sortedEntries = useMemo(() => {
     const all = spec?.projects ?? [];
-    const filtered = focusedPaths.size === 0 ? all : all.filter((p) => focusedPaths.has(p.path));
+    const filtered = all.filter((p) => focusedPaths.has(p.path));
 
     const sessionsByProject = new Map<string, SessionInfo[]>();
     for (const s of sessions.values()) {

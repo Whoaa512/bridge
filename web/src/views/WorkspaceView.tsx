@@ -49,7 +49,6 @@ export default function WorkspaceView() {
   const projects = useMemo(() => {
     if (!spec) return [];
     const filtered = filterProjects(spec.projects, DEFAULT_FILTER);
-    if (focusedPaths.size === 0) return filtered;
     return filtered.filter((p) => focusedPaths.has(p.path));
   }, [spec, focusedPaths]);
 
@@ -100,7 +99,7 @@ export default function WorkspaceView() {
         activeSort={activeSort}
         onSortChange={setActiveSort}
       />
-      {filtered.length === 0 && focusedPaths.size === 0 ? (
+      {filtered.length === 0 ? (
         <div style={styles.emptyState}>
           <div style={styles.emptyTitle}>No projects selected</div>
           <div style={styles.emptyHint}>Press ⌘K to add projects to your workspace</div>
