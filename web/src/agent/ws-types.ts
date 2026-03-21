@@ -14,6 +14,7 @@ export interface HistoricalSession {
   timestamp: string;
   model: string;
   topic: string;
+  filePath: string;
 }
 
 export type BridgeWSCommand =
@@ -27,7 +28,8 @@ export type BridgeWSCommand =
   | { type: "project_pin"; path: string }
   | { type: "project_unpin"; path: string }
   | { type: "project_search"; query: string }
-  | { type: "session_history"; path: string };
+  | { type: "session_history"; path: string }
+  | { type: "session_resume"; cwd: string; projectId: string; filePath: string };
 
 export type BridgeWSEvent =
   | { type: "full_sync"; spec: unknown }

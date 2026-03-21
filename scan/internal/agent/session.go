@@ -100,13 +100,33 @@ func (m *SessionManager) RecoverSessions() []RecoveryResult {
 	return results
 }
 
-func (m *SessionManager) Create(id, cwd, model, projectID string) (*SessionHandle, error) {
+type SessionOpt func(*sessionConfig)
+
+type sessionConfig struct {
+	resumePath string
+}
+
+func WithResumePath(path string) SessionOpt {
+	return func(c *sessionConfig) { c.resumePath = path }
+}
+
+func (m *SessionManager) Create(id, cwd, model, projectID string, opts ...SessionOpt) (*SessionHandle, error) {
+	var cfg sessionConfig
+	for _, o := range opts {
+		o(&cfg)
+	}
+
 	piPath, err := exec.LookPath(m.piBinary)
 	if err != nil {
 		return nil, fmt.Errorf("pi binary not found: %w", err)
 	}
 
-	cmd := exec.Command(piPath, "--mode", "rpc")
+	args := []string{"--mode", "rpc"}
+	if cfg.resumePath != "" {
+		args = append(args, "--session", cfg.resumePath)
+	}
+
+	cmd := exec.Command(piPath, args...)
 	cmd.Dir = cwd
 
 	stdinPipe, err := cmd.StdinPipe()

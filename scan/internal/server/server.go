@@ -314,6 +314,8 @@ func (s *Server) handleWSMessage(c *wsClient, raw []byte) {
 		s.handleProjectUnpin(c, raw)
 	case "session_history":
 		s.handleSessionHistory(c, raw)
+	case "session_resume":
+		s.handleSessionResume(c, raw)
 	default:
 		log.Printf("ws: unknown message type: %q", env.Type)
 	}
@@ -530,6 +532,43 @@ func (s *Server) handleSessionHistory(c *wsClient, raw []byte) {
 		"type":     "session_history_results",
 		"path":     req.Path,
 		"sessions": sessions,
+	})
+}
+
+func (s *Server) handleSessionResume(c *wsClient, raw []byte) {
+	var req struct {
+		CWD       string `json:"cwd"`
+		ProjectID string `json:"projectId"`
+		FilePath  string `json:"filePath"`
+	}
+	if err := json.Unmarshal(raw, &req); err != nil || req.FilePath == "" {
+		sendToClient(c, map[string]string{"type": "error", "error": "invalid session_resume"})
+		return
+	}
+
+	if s.sessions == nil {
+		sendToClient(c, map[string]string{"type": "error", "error": "session manager not available"})
+		return
+	}
+
+	id, err := generateSessionID()
+	if err != nil {
+		sendToClient(c, map[string]string{"type": "error", "error": "failed to generate session id"})
+		return
+	}
+
+	h, err := s.sessions.Create(id, req.CWD, "", req.ProjectID, agent.WithResumePath(req.FilePath))
+	if err != nil {
+		sendToClient(c, map[string]interface{}{
+			"type":  "error",
+			"error": fmt.Sprintf("resume session: %v", err),
+		})
+		return
+	}
+
+	sendToClient(c, map[string]interface{}{
+		"type":    "session_created",
+		"session": h.Info(),
 	})
 }
 

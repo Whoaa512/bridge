@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import { useBridgeStore } from "../../store";
 import type { SessionInfo, HistoricalSession } from "../../agent/ws-types";
 import type { Project } from "../../core/types";
-import { sendSessionCreate, sendProjectPin, sendProjectUnpin, sendProjectOptOut, sendSessionHistory } from "../../agent/commands";
+import { sendSessionCreate, sendProjectPin, sendProjectUnpin, sendProjectOptOut, sendSessionHistory, sendSessionResume } from "../../agent/commands";
 import ContextMenu from "../../ui/ContextMenu";
 import type { ContextMenuItem } from "../../ui/ContextMenu";
 import { relativeTime } from "../../ui/time";
@@ -31,13 +31,13 @@ function SessionRow({ session, isActive, onClick }: {
   );
 }
 
-function HistoryRow({ session }: { session: HistoricalSession }) {
+function HistoryRow({ session, onResume }: { session: HistoricalSession; onResume: () => void }) {
   const label = session.topic || session.model || "Session";
   return (
-    <div style={styles.historyRow}>
+    <button onClick={onResume} style={styles.historyRow}>
       <div style={styles.historyLabel} title={session.topic}>{label}</div>
       <div style={styles.historyTime}>{relativeTime(session.timestamp, "terse")}</div>
-    </div>
+    </button>
   );
 }
 
@@ -116,7 +116,11 @@ function ProjectGroup({ project, sessions, activeSessionId, onSelect, onNew, pin
                 <>
                   <div style={styles.historyHeader}>History</div>
                   {history.map((h) => (
-                    <HistoryRow key={h.id} session={h} />
+                    <HistoryRow
+                      key={h.id}
+                      session={h}
+                      onResume={() => sendSessionResume(h.cwd, project.id, h.filePath)}
+                    />
                   ))}
                 </>
               )}
@@ -431,8 +435,17 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: "4px 8px",
+    width: "100%",
+    padding: "5px 8px",
+    border: "none",
     borderRadius: 4,
+    background: "transparent",
+    color: "#c9d1d9",
+    textAlign: "left" as const,
+    cursor: "pointer",
+    fontSize: 12,
+    fontFamily: "inherit",
+    marginBottom: 1,
     gap: 8,
   },
   historyLabel: {

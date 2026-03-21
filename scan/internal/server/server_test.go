@@ -432,6 +432,47 @@ func TestWSSessionCreateNoManager(t *testing.T) {
 	}
 }
 
+func TestWSSessionResumeNoManager(t *testing.T) {
+	srv := New(0)
+	srv.SetSpec(testSpec())
+	conn := wsConnect(t, srv)
+
+	readWSMsg(t, conn)
+
+	sendWSMsg(t, conn, map[string]interface{}{
+		"type":      "session_resume",
+		"cwd":       "/tmp",
+		"projectId": "project:code/test",
+		"filePath":  "/home/user/.pi/agent/sessions/test.jsonl",
+	})
+	msg := readWSMsg(t, conn)
+
+	if msg["type"] != "error" {
+		t.Errorf("type = %v, want error", msg["type"])
+	}
+}
+
+func TestWSSessionResumeMissingFilePath(t *testing.T) {
+	srv := New(0)
+	srv.SetSpec(testSpec())
+	conn := wsConnect(t, srv)
+
+	readWSMsg(t, conn)
+
+	sendWSMsg(t, conn, map[string]interface{}{
+		"type": "session_resume",
+		"cwd":  "/tmp",
+	})
+	msg := readWSMsg(t, conn)
+
+	if msg["type"] != "error" {
+		t.Errorf("type = %v, want error", msg["type"])
+	}
+	if errMsg, ok := msg["error"].(string); !ok || errMsg != "invalid session_resume" {
+		t.Errorf("error = %v, want 'invalid session_resume'", msg["error"])
+	}
+}
+
 func TestWSSessionDestroyNoManager(t *testing.T) {
 	srv := New(0)
 	srv.SetSpec(testSpec())

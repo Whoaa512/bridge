@@ -45,3 +45,7 @@ export function sendProjectSearch(query: string) {
 export function sendSessionHistory(path: string) {
   _ws?.send({ type: "session_history", path });
 }
+
+export function sendSessionResume(cwd: string, projectId: string, filePath: string) {
+  _ws?.send({ type: "session_resume", cwd, projectId, filePath });
+}

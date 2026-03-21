@@ -16,6 +16,7 @@ type HistoricalSession struct {
 	Timestamp time.Time `json:"timestamp"`
 	Model     string    `json:"model"`
 	Topic     string    `json:"topic"`
+	FilePath  string    `json:"filePath"`
 }
 
 func pathToSessionDir(projectPath string) string {
@@ -45,10 +46,12 @@ func ReadSessionHistory(projectPath string) ([]HistoricalSession, error) {
 			continue
 		}
 
-		s, err := parseSessionFile(filepath.Join(dir, entry.Name()))
+		fullPath := filepath.Join(dir, entry.Name())
+		s, err := parseSessionFile(fullPath)
 		if err != nil {
 			continue
 		}
+		s.FilePath = fullPath
 		sessions = append(sessions, s)
 	}
 
@@ -78,10 +81,12 @@ func ReadSessionHistoryFromBase(baseDir, projectPath string) ([]HistoricalSessio
 			continue
 		}
 
-		s, err := parseSessionFile(filepath.Join(dir, entry.Name()))
+		fullPath := filepath.Join(dir, entry.Name())
+		s, err := parseSessionFile(fullPath)
 		if err != nil {
 			continue
 		}
+		s.FilePath = fullPath
 		sessions = append(sessions, s)
 	}
 

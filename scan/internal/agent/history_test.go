@@ -67,6 +67,10 @@ func TestReadSessionHistoryBasicParse(t *testing.T) {
 	if s.Topic != "Hello world, this is a test session" {
 		t.Errorf("topic = %q, want %q", s.Topic, "Hello world, this is a test session")
 	}
+	expectedPath := filepath.Join(dir, "2026-03-19T00-03-49-756Z_abc123.jsonl")
+	if s.FilePath != expectedPath {
+		t.Errorf("filePath = %q, want %q", s.FilePath, expectedPath)
+	}
 }
 
 func TestReadSessionHistoryMissingDir(t *testing.T) {
