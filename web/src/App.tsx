@@ -3,6 +3,7 @@ import { useBridgeStore, type View } from "./store";
 import { viewFromPath, pushView } from "./router";
 import WorkspaceView from "./views/WorkspaceView";
 import SessionsView from "./views/SessionsView";
+import ProjectSearch from "./views/sessions/ProjectSearch";
 
 const TABS: { view: View; label: string; key: string }[] = [
   { view: "sessions", label: "Sessions", key: "1" },
@@ -18,6 +19,8 @@ function isInputFocused(): boolean {
 export default function App() {
   const activeView = useBridgeStore((s) => s.activeView);
   const setActiveView = useBridgeStore((s) => s.setActiveView);
+  const showProjectSearch = useBridgeStore((s) => s.showProjectSearch);
+  const setShowProjectSearch = useBridgeStore((s) => s.setShowProjectSearch);
 
   const switchView = useCallback((view: View) => {
     setActiveView(view);
@@ -36,11 +39,16 @@ export default function App() {
   }, [setActiveView]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      e.preventDefault();
+      setShowProjectSearch(true);
+      return;
+    }
     if (isInputFocused()) return;
     const tab = TABS.find((t) => t.key === e.key);
     if (!tab) return;
     switchView(tab.view);
-  }, [switchView]);
+  }, [switchView, setShowProjectSearch]);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
@@ -73,6 +81,7 @@ export default function App() {
         ))}
       </nav>
       {viewContent && <div style={styles.viewPanel}>{viewContent}</div>}
+      {showProjectSearch && <ProjectSearch onClose={() => setShowProjectSearch(false)} />}
     </>
   );
 }

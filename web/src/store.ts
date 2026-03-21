@@ -57,6 +57,9 @@ export interface BridgeStore {
   addFocusedProject: (id: string) => void;
   removeFocusedProject: (id: string) => void;
   togglePinProject: (id: string) => void;
+
+  showProjectSearch: boolean;
+  setShowProjectSearch: (show: boolean) => void;
 }
 
 export const useBridgeStore = create<BridgeStore>((set, get) => ({
@@ -185,4 +188,7 @@ export const useBridgeStore = create<BridgeStore>((set, get) => ({
     }
     set({ pinnedProjectIds: next });
   },
+
+  showProjectSearch: false,
+  setShowProjectSearch: (show) => set({ showProjectSearch: show }),
 }));
