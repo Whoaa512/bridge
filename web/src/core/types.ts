@@ -74,6 +74,7 @@ export interface Size {
   loc: number;
   files: number;
   deps: number;
+  approx?: boolean;
 }
 
 export interface Activity {

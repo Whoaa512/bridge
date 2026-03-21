@@ -198,7 +198,8 @@
       "properties": {
         "loc": { "type": "integer", "minimum": 0 },
         "files": { "type": "integer", "minimum": 0 },
-        "deps": { "type": "integer", "minimum": 0 }
+        "deps": { "type": "integer", "minimum": 0 },
+        "approx": { "type": "boolean" }
       }
     },
     "Activity": {

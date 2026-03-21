@@ -187,9 +187,13 @@ func buildProject(dp Project, cfg *config.Config) spec.Project {
 
 			if !stats.LastCommit.IsZero() {
 				staleDays := int(now.Sub(stats.LastCommit).Hours() / 24)
+				commitsThisWeek := 0
+				if staleDays < 7 {
+					commitsThisWeek = countCommitsThisWeek(dp.Path)
+				}
 				p.Activity = &spec.Activity{
 					LastTouch:       stats.LastCommit,
-					CommitsThisWeek: countCommitsThisWeek(dp.Path),
+					CommitsThisWeek: commitsThisWeek,
 					StaleDays:       staleDays,
 				}
 			}
@@ -241,7 +245,7 @@ func buildMonorepoChild(parent Project, parentRemoteURL *string, childPath strin
 	p.Classification = cl.Class
 	p.ClassificationSource = cl.Source
 
-	p.Size = CollectSize(childPath, cfg.Ignore)
+	p.Size = &spec.Size{Deps: countDeps(childPath)}
 
 	if priority, ok := cfg.Priorities[id]; ok {
 		p.Priority = &priority

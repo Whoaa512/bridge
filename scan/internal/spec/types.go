@@ -73,9 +73,10 @@ type Task struct {
 }
 
 type Size struct {
-	LOC   int `json:"loc"`
-	Files int `json:"files"`
-	Deps  int `json:"deps"`
+	LOC    int  `json:"loc"`
+	Files  int  `json:"files"`
+	Deps   int  `json:"deps"`
+	Approx bool `json:"approx,omitempty"`
 }
 
 type Activity struct {

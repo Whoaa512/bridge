@@ -1,9 +1,11 @@
 package git
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"os/exec"
-	"strconv"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -22,63 +24,73 @@ type Stats struct {
 func GetStats(repoPath string) (*Stats, error) {
 	s := &Stats{}
 
-	branch, err := RunGitCmd(repoPath, "rev-parse", "--abbrev-ref", "HEAD")
+	out, err := RunGitCmd(repoPath,
+		"-c", "gc.auto=0",
+		"status", "--porcelain", "--branch")
 	if err != nil {
-		return nil, fmt.Errorf("get branch: %w", err)
+		return nil, fmt.Errorf("get status: %w", err)
 	}
-	s.Branch = strings.TrimSpace(branch)
+	parseStatusBranch(out, s)
 
-	s.Branches = listBranches(repoPath)
-	s.Uncommitted = countUncommitted(repoPath)
-	s.Ahead, s.Behind = getAheadBehind(repoPath)
-	s.StashCount = countStash(repoPath)
-	s.LastCommit = getLastCommit(repoPath)
-	s.RemoteURL = getRemoteURL(repoPath)
+	s.Branches = listBranchesFromFS(repoPath)
+	s.StashCount = countStashFromFS(repoPath)
+	s.LastCommit = getLastCommitFromFS(repoPath)
+	s.RemoteURL = getRemoteURLFromFS(repoPath)
 
 	return s, nil
 }
 
-func countUncommitted(repoPath string) int {
-	out, err := RunGitCmd(repoPath, "status", "--porcelain")
+func parseStatusBranch(out string, s *Stats) {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) == 0 {
+		return
+	}
+
+	header := lines[0]
+	if strings.HasPrefix(header, "## ") {
+		header = header[3:]
+		if idx := strings.Index(header, "..."); idx >= 0 {
+			s.Branch = header[:idx]
+			rest := header[idx+3:]
+			if ab := strings.Index(rest, " ["); ab >= 0 {
+				info := rest[ab+2 : len(rest)-1]
+				for _, part := range strings.Split(info, ", ") {
+					part = strings.TrimSpace(part)
+					if strings.HasPrefix(part, "ahead ") {
+						fmt.Sscanf(part, "ahead %d", &s.Ahead)
+					}
+					if strings.HasPrefix(part, "behind ") {
+						fmt.Sscanf(part, "behind %d", &s.Behind)
+					}
+				}
+			}
+		} else {
+			s.Branch = strings.TrimSpace(header)
+		}
+	}
+
+	uncommitted := 0
+	for _, line := range lines[1:] {
+		if line != "" {
+			uncommitted++
+		}
+	}
+	s.Uncommitted = uncommitted
+}
+
+func countStashFromFS(repoPath string) int {
+	data, err := os.ReadFile(filepath.Join(repoPath, ".git", "logs", "refs", "stash"))
 	if err != nil {
 		return 0
 	}
-	out = strings.TrimSpace(out)
-	if out == "" {
+	content := strings.TrimSpace(string(data))
+	if content == "" {
 		return 0
 	}
-	return len(strings.Split(out, "\n"))
+	return len(strings.Split(content, "\n"))
 }
 
-func getAheadBehind(repoPath string) (int, int) {
-	out, err := RunGitCmd(repoPath, "rev-list", "--left-right", "--count", "HEAD...@{upstream}")
-	if err != nil {
-		return 0, 0
-	}
-
-	parts := strings.Fields(strings.TrimSpace(out))
-	if len(parts) != 2 {
-		return 0, 0
-	}
-
-	ahead, _ := strconv.Atoi(parts[0])
-	behind, _ := strconv.Atoi(parts[1])
-	return ahead, behind
-}
-
-func countStash(repoPath string) int {
-	out, err := RunGitCmd(repoPath, "stash", "list")
-	if err != nil {
-		return 0
-	}
-	out = strings.TrimSpace(out)
-	if out == "" {
-		return 0
-	}
-	return len(strings.Split(out, "\n"))
-}
-
-func getLastCommit(repoPath string) time.Time {
+func getLastCommitFromFS(repoPath string) time.Time {
 	out, err := RunGitCmd(repoPath, "log", "-1", "--format=%aI")
 	if err != nil {
 		return time.Time{}
@@ -90,16 +102,32 @@ func getLastCommit(repoPath string) time.Time {
 	return t
 }
 
-func getRemoteURL(repoPath string) *string {
-	out, err := RunGitCmd(repoPath, "remote", "get-url", "origin")
+func getRemoteURLFromFS(repoPath string) *string {
+	data, err := os.ReadFile(filepath.Join(repoPath, ".git", "config"))
 	if err != nil {
 		return nil
 	}
-	url := strings.TrimSpace(out)
-	if url == "" {
-		return nil
+
+	inOrigin := false
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == `[remote "origin"]` {
+			inOrigin = true
+			continue
+		}
+		if strings.HasPrefix(trimmed, "[") {
+			inOrigin = false
+			continue
+		}
+		if inOrigin && strings.HasPrefix(trimmed, "url = ") {
+			url := strings.TrimPrefix(trimmed, "url = ")
+			url = strings.TrimSpace(url)
+			if url != "" {
+				return &url
+			}
+		}
 	}
-	return &url
+	return nil
 }
 
 func RunGitCmd(repoPath string, args ...string) (string, error) {
@@ -111,14 +139,53 @@ func RunGitCmd(repoPath string, args ...string) (string, error) {
 	return string(out), nil
 }
 
-func listBranches(repoPath string) []string {
-	out, err := RunGitCmd(repoPath, "branch", "--format=%(refname:short)")
+func RunGitCmdContext(ctx context.Context, repoPath string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repoPath}, args...)...)
+	out, err := cmd.Output()
 	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+func listBranchesFromFS(repoPath string) []string {
+	refsDir := filepath.Join(repoPath, ".git", "refs", "heads")
+	var branches []string
+
+	filepath.Walk(refsDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(refsDir, path)
+		if err != nil {
+			return nil
+		}
+		branches = append(branches, rel)
+		return nil
+	})
+
+	if len(branches) == 0 {
+		data, err := os.ReadFile(filepath.Join(repoPath, ".git", "packed-refs"))
+		if err != nil {
+			return []string{}
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "^") {
+				continue
+			}
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				ref := parts[1]
+				if strings.HasPrefix(ref, "refs/heads/") {
+					branches = append(branches, strings.TrimPrefix(ref, "refs/heads/"))
+				}
+			}
+		}
+	}
+
+	if len(branches) == 0 {
 		return []string{}
 	}
-	out = strings.TrimSpace(out)
-	if out == "" {
-		return []string{}
-	}
-	return strings.Split(out, "\n")
+	return branches
 }

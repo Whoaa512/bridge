@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cjwinslow/bridge/scan/internal/git"
 	"github.com/cjwinslow/bridge/scan/internal/spec"
 )
 
@@ -26,6 +27,91 @@ var skipDirs = map[string]bool{
 }
 
 func CollectSize(projectPath string, ignores []string) *spec.Size {
+	if isGitRepo(projectPath) {
+		return collectSizeGit(projectPath, ignores)
+	}
+	return collectSizeWalk(projectPath, ignores)
+}
+
+func collectSizeGit(projectPath string, ignores []string) *spec.Size {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	out, err := git.RunGitCmdContext(ctx, projectPath, "ls-files", "-z")
+	if err != nil {
+		return collectSizeWalk(projectPath, ignores)
+	}
+
+	size := &spec.Size{}
+	var sourceFiles []string
+
+	for _, f := range strings.Split(out, "\000") {
+		if f == "" {
+			continue
+		}
+
+		ext := strings.ToLower(filepath.Ext(f))
+		if !sourceExts[ext] {
+			continue
+		}
+
+		if shouldSkipGitFile(f, ignores) {
+			continue
+		}
+
+		sourceFiles = append(sourceFiles, f)
+	}
+
+	size.Files = len(sourceFiles)
+
+	const exactLimit = 500
+	const sampleSize = 200
+
+	switch {
+	case size.Files <= exactLimit:
+		for _, f := range sourceFiles {
+			size.LOC += countLines(filepath.Join(projectPath, f))
+		}
+	case size.Files <= 5000:
+		step := size.Files / sampleSize
+		if step < 1 {
+			step = 1
+		}
+		sampledLOC := 0
+		sampledCount := 0
+		for i := 0; i < size.Files; i += step {
+			sampledLOC += countLines(filepath.Join(projectPath, sourceFiles[i]))
+			sampledCount++
+		}
+		if sampledCount > 0 {
+			size.LOC = int(float64(sampledLOC) / float64(sampledCount) * float64(size.Files))
+		}
+		size.Approx = true
+	default:
+		size.LOC = size.Files * 40
+		size.Approx = true
+	}
+
+	size.Deps = countDeps(projectPath)
+	return size
+}
+
+func shouldSkipGitFile(relPath string, ignores []string) bool {
+	parts := strings.Split(relPath, "/")
+	for _, part := range parts[:len(parts)-1] {
+		if skipDirs[part] || strings.HasPrefix(part, "bazel-") {
+			return true
+		}
+		for _, ig := range ignores {
+			if matched, _ := filepath.Match(ig, part); matched {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func collectSizeWalk(projectPath string, ignores []string) *spec.Size {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
