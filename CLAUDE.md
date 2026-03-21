@@ -36,7 +36,7 @@ Dev environment colony map + battle station: Go scanner → `~/.bridge/spec.json
 
 - Scanner: `cmd/bridge/main.go` → `discover.Walk()` → `git.GetStats()` → `discover.CollectSize()` → `spec.Emit()`
   - Walk: finds git repos under scan roots (~50ms for 108 repos)
-  - BuildSpec: parallel workers (up to 8) process each repo
+  - BuildSpec(`cfg`, `cache`): parallel workers (up to 8), check cache before computing per-project
   - Per repo: `git status --porcelain --branch` + `git ls-files -z` (2 subprocesses), rest is filesystem reads
   - Monorepo children: skip LOC counting (parent already counted), only count deps
 - Web: React shell (`App.tsx`) with 4 tab views: Complexity, Workspace, Colony, Sessions
@@ -49,15 +49,21 @@ Dev environment colony map + battle station: Go scanner → `~/.bridge/spec.json
 - fsnotify watches `.git/` dirs; CHMOD events are ignored (always noise); noisy git internal files (fsmonitor, lock files, FETCH_HEAD) are filtered
 - Agent sessions will be managed by Go server directly (no separate sidecar) — see `docs/BATTLE-STATION.md`
 
-## Scanner Performance
+## Scanner Performance & Caching
 
-Scans ~108 git repos + 617 monorepo children in ~4s. Key design choices:
+Scans ~108 git repos + 617 monorepo children in ~4s (cold). Key design choices:
 - **git ls-files** over filepath.Walk — reads git index directly, avoids stat() per file
 - **Tiered LOC counting**: exact (≤500 files), sampled 200 files (≤5K), heuristic `files×40` (>5K). `Size.Approx` flag when estimated.
 - **Filesystem reads over git subprocesses**: stash from `.git/logs/refs/stash`, branches from `.git/refs/heads/`, remote URL from `.git/config`, last commit from `.git/logs/HEAD`
 - **shouldSkipGitFile**: uses `IndexByte` scanning + map lookup (was 40% of CPU with filepath.Match)
 - **countCommitsThisWeek**: skipped entirely if last commit > 7 days ago
-- **Cache is wired up** — `BuildSpec` takes `*watch.Cache` (nil for one-shot scans). Initial serve scan seeds cache; watcher-triggered rescans only recompute invalidated projects. Typical single-project rescan drops from ~4s to ~50-200ms.
+
+### Incremental Rescan Cache
+- `watch/cache.go`: in-memory TTL cache (TierLocal=30s, TierRemote=5min) with Get/Set/Invalidate/InvalidatePrefix
+- `BuildSpec(cfg, cache)` — `cache` param is nil-safe (nil = no caching, used for one-shot `bridge scan`)
+- `bridge serve` creates cache before initial scan (seeds it), passes to watcher callback
+- Watcher flow: fsnotify detects `.git/` change → `InvalidatePrefix(projectPath)` → triggers rescan → only invalidated project recomputed, rest served from cache
+- Cache key = `dp.Path` (absolute path from Walk), same value flows through watcher's `WatchProject` → matches invalidation
 
 ## Web Conventions
 
@@ -79,3 +85,4 @@ See `docs/BATTLE-STATION.md` for full plan. Phases 1–4 complete.
 - Multiple agents may work in this repo concurrently
 - Only `git add` and commit files YOU changed — check `git status` and `git diff` before committing
 - Don't commit untracked files you didn't create
+- `AGENTS.md` is a symlink to `CLAUDE.md` — editing either updates both
