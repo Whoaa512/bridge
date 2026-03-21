@@ -87,7 +87,7 @@ func doScan(cfg *config.Config) *spec.BridgeSpec {
 	}
 	defer lock.Release()
 
-	return discover.BuildSpec(cfg)
+	return discover.BuildSpec(cfg, nil)
 }
 
 func runScan() {
@@ -168,7 +168,7 @@ func runServe() {
 	}
 
 	fmt.Fprintf(os.Stderr, "Scanning...\n")
-	s := discover.BuildSpec(cfg)
+	s := discover.BuildSpec(cfg, nil)
 	fmt.Fprintf(os.Stderr, "Found %d projects\n", len(s.Projects))
 
 	if err := spec.Emit(s); err != nil {
@@ -245,7 +245,7 @@ func runServe() {
 	var w *watch.Watcher
 	w, err = watch.NewWatcher(cache, func(projectPath string) {
 		fmt.Fprintf(os.Stderr, "Rescan triggered by %s\n", projectPath)
-		updated := discover.BuildSpec(cfg)
+		updated := discover.BuildSpec(cfg, cache)
 		if err := spec.Emit(updated); err != nil {
 			fmt.Fprintf(os.Stderr, "error writing spec: %v\n", err)
 			w.SetScanning(false)

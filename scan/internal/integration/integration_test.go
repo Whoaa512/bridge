@@ -74,7 +74,7 @@ func TestIntegrationScan(t *testing.T) {
 	os.WriteFile(filepath.Join(scanRoot, "not-a-project", "random.txt"), []byte("hi"), 0644)
 
 	cfg := config.NewDefault([]string{scanRoot})
-	s := discover.BuildSpec(cfg)
+	s := discover.BuildSpec(cfg, nil)
 
 	if s.Version != spec.Version {
 		t.Errorf("version = %q, want %q", s.Version, spec.Version)
@@ -177,7 +177,7 @@ func TestIntegrationErrorsArray(t *testing.T) {
 	os.MkdirAll(filepath.Join(dir, ".git"), 0755)
 
 	cfg := config.NewDefault([]string{scanRoot})
-	s := discover.BuildSpec(cfg)
+	s := discover.BuildSpec(cfg, nil)
 
 	if len(s.Projects) != 1 {
 		t.Fatalf("expected 1 project, got %d", len(s.Projects))
@@ -202,7 +202,7 @@ func TestIntegrationSpecEmission(t *testing.T) {
 	})
 
 	cfg := config.NewDefault([]string{scanRoot})
-	s := discover.BuildSpec(cfg)
+	s := discover.BuildSpec(cfg, nil)
 
 	if err := spec.Emit(s); err != nil {
 		t.Fatalf("Emit: %v", err)
@@ -272,7 +272,7 @@ func TestSpecValidatesAgainstSchema(t *testing.T) {
 		})
 
 		cfg := config.NewDefault([]string{scanRoot})
-		s := discover.BuildSpec(cfg)
+		s := discover.BuildSpec(cfg, nil)
 		validateSpecAgainstSchema(t, s)
 	})
 
@@ -292,7 +292,7 @@ func TestSpecValidatesAgainstSchema(t *testing.T) {
 		os.MkdirAll(filepath.Join(broken, ".git"), 0755)
 
 		cfg := config.NewDefault([]string{scanRoot})
-		s := discover.BuildSpec(cfg)
+		s := discover.BuildSpec(cfg, nil)
 
 		hasMono := false
 		hasBroken := false

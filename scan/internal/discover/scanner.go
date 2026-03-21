@@ -12,6 +12,7 @@ import (
 	"github.com/cjwinslow/bridge/scan/internal/config"
 	"github.com/cjwinslow/bridge/scan/internal/git"
 	"github.com/cjwinslow/bridge/scan/internal/spec"
+	"github.com/cjwinslow/bridge/scan/internal/watch"
 )
 
 type projectWork struct {
@@ -24,7 +25,7 @@ type projectResult struct {
 	children    []spec.Project
 }
 
-func BuildSpec(cfg *config.Config) *spec.BridgeSpec {
+func BuildSpec(cfg *config.Config, cache *watch.Cache) *spec.BridgeSpec {
 	result := Walk(cfg.ScanRoots, cfg.Ignore)
 
 	hostname, _ := os.Hostname()
@@ -77,7 +78,17 @@ func BuildSpec(cfg *config.Config) *spec.BridgeSpec {
 		go func() {
 			defer wg.Done()
 			for w := range work {
-				results[w.index] = processProject(w.dp, cfg)
+				if cache != nil {
+					if cached, ok := cache.Get(w.dp.Path); ok {
+						results[w.index] = cached.(projectResult)
+						continue
+					}
+				}
+				r := processProject(w.dp, cfg)
+				if cache != nil {
+					cache.Set(w.dp.Path, r, watch.TierLocal)
+				}
+				results[w.index] = r
 			}
 		}()
 	}
