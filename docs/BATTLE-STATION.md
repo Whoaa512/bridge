@@ -337,6 +337,7 @@ React owns `#app` root. Canvas overlays on top for treemap views.
 - **Extended WorkspaceFilter type**: `"all"|"has_prs"|"active_agents"|"stale"|"uncommitted"|"behind_remote"|"failing_ci"`. First 4 have pill buttons, rest accessible via attention bar clicks.
 - **All computed values memoized**: `useMemo` for projects, attentionItems, stats, filtered list. Not strictly needed at 721 projects but proper practice.
 - **Card click logic**: If project has existing sessions → switch to first session. Otherwise → create new session. Always navigates to Sessions tab.
+- **Sort with stale partition**: 3 sort modes (Activity, Name, Uncommitted). All modes partition stale projects (>14 days) to bottom. Default "Activity" sort shows recently-active projects first — day-1 experience with 108 projects shows the ~27 active ones above the ~81 stale ones.
 - **Inline styles pattern**: Consistent with SessionsView/App.tsx. No CSS files, no CSS-in-JS libraries.
 - **Pulse animation for streaming agents**: Injected once via DOM `<style>` tag (same pattern as any dynamic keyframe in inline-styles-only codebases).
 - **`computeAttentionItems` extracted to `attention-utils.ts`**: Matches `filter-utils.ts` pattern — pure functions in their own files, separate from components.
