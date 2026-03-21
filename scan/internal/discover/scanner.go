@@ -27,7 +27,43 @@ type projectResult struct {
 
 func BuildSpec(cfg *config.Config, cache *watch.Cache) *spec.BridgeSpec {
 	result := Walk(cfg.ScanRoots, cfg.Ignore)
+	return buildSpecFromProjects(result.Projects, cfg, cache)
+}
 
+func BuildSpecForPaths(paths []string, cfg *config.Config, cache *watch.Cache) *spec.BridgeSpec {
+	seen := make(map[string]bool)
+	var projects []Project
+
+	for _, p := range paths {
+		p = expandHome(p)
+		info, err := os.Stat(p)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+
+		if seen[p] {
+			continue
+		}
+		seen[p] = true
+
+		dp := Project{
+			Path:  p,
+			Name:  filepath.Base(p),
+			Kind:  "git_repo",
+			IsGit: isGitRepo(p),
+		}
+		if hasInfraProject(p) {
+			dp.HasInfra = true
+		}
+		dp.MonorepoChildren = detectMonorepoChildren(p, cfg.Ignore, seen)
+
+		projects = append(projects, dp)
+	}
+
+	return buildSpecFromProjects(projects, cfg, cache)
+}
+
+func buildSpecFromProjects(projects []Project, cfg *config.Config, cache *watch.Cache) *spec.BridgeSpec {
 	hostname, _ := os.Hostname()
 	uptime := getUptime()
 
@@ -60,7 +96,7 @@ func BuildSpec(cfg *config.Config, cache *watch.Cache) *spec.BridgeSpec {
 		},
 	}
 
-	if len(result.Projects) == 0 {
+	if len(projects) == 0 {
 		return s
 	}
 
@@ -70,7 +106,7 @@ func BuildSpec(cfg *config.Config, cache *watch.Cache) *spec.BridgeSpec {
 	}
 
 	work := make(chan projectWork)
-	results := make([]projectResult, len(result.Projects))
+	results := make([]projectResult, len(projects))
 
 	var wg sync.WaitGroup
 	for range workers {
@@ -93,7 +129,7 @@ func BuildSpec(cfg *config.Config, cache *watch.Cache) *spec.BridgeSpec {
 		}()
 	}
 
-	for i, dp := range result.Projects {
+	for i, dp := range projects {
 		work <- projectWork{index: i, dp: dp}
 	}
 	close(work)
