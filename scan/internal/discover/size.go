@@ -1,7 +1,6 @@
 package discover
 
 import (
-	"bufio"
 	"context"
 	"os"
 	"path/filepath"
@@ -27,8 +26,10 @@ var skipDirs = map[string]bool{
 }
 
 func CollectSize(projectPath string, ignores []string) *spec.Size {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
+
+	const maxFiles = 50_000
 
 	size := &spec.Size{}
 
@@ -38,6 +39,11 @@ func CollectSize(projectPath string, ignores []string) *spec.Size {
 		}
 		if err != nil {
 			return nil
+		}
+
+		if size.Files >= maxFiles {
+			size.Approx = true
+			return filepath.SkipAll
 		}
 
 		name := info.Name()
@@ -68,6 +74,10 @@ func CollectSize(projectPath string, ignores []string) *spec.Size {
 		if size.Files == 0 && size.LOC == 0 {
 			return size
 		}
+		size.Approx = true
+	}
+	if err == context.DeadlineExceeded {
+		size.Approx = true
 	}
 
 	size.Deps = countDeps(projectPath)
@@ -81,12 +91,18 @@ func countLines(path string) int {
 	}
 	defer f.Close()
 
+	buf := make([]byte, 32*1024)
 	count := 0
-	scanner := bufio.NewScanner(f)
-	buf := make([]byte, 64*1024)
-	scanner.Buffer(buf, 1024*1024)
-	for scanner.Scan() {
-		count++
+	for {
+		n, err := f.Read(buf)
+		for i := 0; i < n; i++ {
+			if buf[i] == '\n' {
+				count++
+			}
+		}
+		if err != nil {
+			break
+		}
 	}
 	return count
 }
