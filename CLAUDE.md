@@ -39,7 +39,7 @@ Dev environment colony map + battle station: Go scanner → `~/.bridge/spec.json
   - BuildSpec(`cfg`, `cache`): parallel workers (up to 8), check cache before computing per-project
   - Per repo: `git status --porcelain --branch` + `git ls-files -z` (2 subprocesses), rest is filesystem reads
   - Monorepo children: skip LOC counting (parent already counted), only count deps
-- Web: React shell (`App.tsx`) with 4 tab views: Complexity, Workspace, Colony, Sessions
+- Web: React shell (`App.tsx`) with 4 tab views: Sessions (default), Workspace, Complexity, Colony
   - Canvas views (Complexity, Colony): tab bar only, canvas visible + interactive
   - Panel views (Workspace, Sessions): canvas hidden, React renders full panel
   - Canvas lifecycle: `initCanvas()` → `CanvasHandle` (destroy/setVisible/updateSpec) in `canvas/bridge.ts`
