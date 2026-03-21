@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useBridgeStore } from "../../store";
-import type { SessionInfo } from "../../agent/ws-types";
+import type { SessionInfo, HistoricalSession } from "../../agent/ws-types";
 import type { Project } from "../../core/types";
-import { sendSessionCreate, sendProjectPin, sendProjectUnpin, sendProjectOptOut } from "../../agent/commands";
+import { sendSessionCreate, sendProjectPin, sendProjectUnpin, sendProjectOptOut, sendSessionHistory } from "../../agent/commands";
 import ContextMenu from "../../ui/ContextMenu";
 import type { ContextMenuItem } from "../../ui/ContextMenu";
+import { relativeTime } from "../../ui/time";
 
 type ProjectEntry = { project: Project; sessions: SessionInfo[]; pinned: boolean };
 
@@ -30,6 +31,16 @@ function SessionRow({ session, isActive, onClick }: {
   );
 }
 
+function HistoryRow({ session }: { session: HistoricalSession }) {
+  const label = session.topic || session.model || "Session";
+  return (
+    <div style={styles.historyRow}>
+      <div style={styles.historyLabel} title={session.topic}>{label}</div>
+      <div style={styles.historyTime}>{relativeTime(session.timestamp, "terse")}</div>
+    </div>
+  );
+}
+
 function ProjectGroup({ project, sessions, activeSessionId, onSelect, onNew, pinned, onPin, onContextMenu }: {
   project: Project;
   sessions: SessionInfo[];
@@ -42,7 +53,15 @@ function ProjectGroup({ project, sessions, activeSessionId, onSelect, onNew, pin
 }) {
   const expanded = useBridgeStore((s) => s.expandedProjects.has(project.id));
   const toggle = useBridgeStore((s) => s.toggleProjectExpanded);
+  const history = useBridgeStore((s) => s.sessionHistory.get(project.path));
   const [hovered, setHovered] = useState(false);
+  const [historyRequested, setHistoryRequested] = useState(false);
+
+  useEffect(() => {
+    if (!expanded || historyRequested) return;
+    setHistoryRequested(true);
+    sendSessionHistory(project.path);
+  }, [expanded, historyRequested, project.path]);
 
   const hasActive = sessions.some((s) => s.state === "streaming");
   const showPinBtn = hovered || pinned;
@@ -79,17 +98,27 @@ function ProjectGroup({ project, sessions, activeSessionId, onSelect, onNew, pin
       </div>
       {expanded && (
         <div style={styles.sessionList}>
-          {sessions.length === 0 ? (
+          {sessions.length === 0 && (!history || history.length === 0) ? (
             <div style={styles.noSessions}>No sessions</div>
           ) : (
-            sessions.map((s) => (
-              <SessionRow
-                key={s.id}
-                session={s}
-                isActive={s.id === activeSessionId}
-                onClick={() => onSelect(s.id)}
-              />
-            ))
+            <>
+              {sessions.map((s) => (
+                <SessionRow
+                  key={s.id}
+                  session={s}
+                  isActive={s.id === activeSessionId}
+                  onClick={() => onSelect(s.id)}
+                />
+              ))}
+              {history && history.length > 0 && (
+                <>
+                  <div style={styles.historyHeader}>History</div>
+                  {history.map((h) => (
+                    <HistoryRow key={h.id} session={h} />
+                  ))}
+                </>
+              )}
+            </>
           )}
         </div>
       )}
@@ -387,6 +416,35 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "4px 8px",
     fontSize: 11,
     color: "#484f58",
+  },
+  historyHeader: {
+    fontSize: 10,
+    fontWeight: 600,
+    textTransform: "uppercase",
+    letterSpacing: "0.06em",
+    color: "#484f58",
+    padding: "8px 8px 4px",
+  },
+  historyRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "4px 8px",
+    borderRadius: 4,
+    gap: 8,
+  },
+  historyLabel: {
+    fontSize: 11,
+    color: "#6e7681",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    flex: 1,
+  },
+  historyTime: {
+    fontSize: 10,
+    color: "#484f58",
+    flexShrink: 0,
   },
   divider: {
     height: 1,
