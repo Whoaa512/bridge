@@ -311,18 +311,35 @@ React owns `#app` root. Canvas overlays on top for treemap views.
 
 **Ships**: Functional agent chat from Bridge with full extension support.
 
-### Phase 4: Workspace View
+### Phase 4: Workspace View ✅
 
 **Goal**: World state dashboard, branch-dashboard replacement.
 
-1. Extend Go scanner: branch list, PR data per project
-2. `WorkspaceView` React component:
-   - Attention bar (items needing action)
-   - Stats bar (projects, branches, PRs, active agents)
-   - Project cards with branches, PRs, agent status
-3. Search + filter pills (All, Has PRs, Active Agents, Stale)
-4. Pi session status from Go server (sessions_list query)
-5. Click project card → start session against it
+**Status**: Complete (7 commits, 150 web tests, all Go tests passing)
+
+1. ✅ Go scanner extended: `branches` field added to `GitStatus` (list of all local branches per project)
+2. ✅ `WorkspaceView` React component with 3-section layout:
+   - Attention bar (severity-colored items: failing CI, PRs needing review, uncommitted, behind remote, stale, streaming agents)
+   - Stats bar (projects, uncommitted, PRs, active agents)
+   - Project cards grid (responsive, `minmax(320px, 1fr)`)
+3. ✅ Search + filter pills (All, Has PRs, Active Agents, Stale) + extended filters (Uncommitted, Behind Remote, Failing CI) via attention bar clicks
+4. ✅ Agent session status wired from zustand store into stats bar and per-card agent indicators
+5. ✅ Click project card → start session (or switch to existing) + navigate to Sessions tab
+
+**Implementation decisions made during Phase 4:**
+
+- **No GitHub/CI API integration yet**: PR and CI fields exist in types but scanner doesn't populate them. WorkspaceView renders them when present, shows correctly with empty data. Future enhancement.
+- **Branches field added to GitStatus**: `git branch --format=%(refname:short)` collects all local branches. Useful for workspace awareness.
+- **Stats bar shows "Uncommitted" not "Branches"**: Branch count across 721 projects is noisy/unactionable. Uncommitted count is actionable.
+- **Two relativeTime formats**: Single `relativeTime(date, format)` in `ui/time.ts` — verbose ("3 days ago") for general use, terse ("3d ago") for compact cards.
+- **Attention items are typed objects with severity**: `AttentionItem = { message, severity: "info"|"warning"|"urgent", filter? }`. Colors: urgent=red, warning=yellow, info=blue.
+- **Attention bar clicks set workspace filter**: Clicking "3 projects with uncommitted changes" sets filter to "uncommitted". Non-pill filters show a dismiss chip.
+- **Extended WorkspaceFilter type**: `"all"|"has_prs"|"active_agents"|"stale"|"uncommitted"|"behind_remote"|"failing_ci"`. First 4 have pill buttons, rest accessible via attention bar clicks.
+- **All computed values memoized**: `useMemo` for projects, attentionItems, stats, filtered list. Not strictly needed at 721 projects but proper practice.
+- **Card click logic**: If project has existing sessions → switch to first session. Otherwise → create new session. Always navigates to Sessions tab.
+- **Inline styles pattern**: Consistent with SessionsView/App.tsx. No CSS files, no CSS-in-JS libraries.
+- **Pulse animation for streaming agents**: Injected once via DOM `<style>` tag (same pattern as any dynamic keyframe in inline-styles-only codebases).
+- **`computeAttentionItems` extracted to `attention-utils.ts`**: Matches `filter-utils.ts` pattern — pure functions in their own files, separate from components.
 
 **Ships**: Full workspace awareness, branch-dashboard replaced.
 
@@ -345,9 +362,9 @@ After Phase 3:
 - [x] `bridge serve` starts scanner + web + agent session manager
 
 After Phase 4:
-- [ ] Workspace view shows branches, PRs, agent status
-- [ ] Search and filter projects
-- [ ] Attention bar surfaces items needing action
+- [x] Workspace view shows branches, PRs, agent status
+- [x] Search and filter projects
+- [x] Attention bar surfaces items needing action
 
 ## Non-Goals (this milestone)
 
@@ -394,3 +411,9 @@ After Phase 4:
 | Dead session cleanup | Auto-remove from map when readLoop exits | Prevents writes to dead processes, clean state |
 | Bridge synthetic events | `session_exit`/`session_error` are top-level WS events | Distinct from pi_event so frontend can handle separately |
 | Session event broadcast | All pi events broadcast to all WS clients | Single-user tool, simplicity over targeting |
+| Workspace stats bar content | Uncommitted count, not branch count | Branch count across many projects is noisy; uncommitted is actionable |
+| Workspace filter architecture | 7 filter types, 4 pill buttons + attention bar as secondary filter trigger | Extended filters accessible via attention bar clicks, dismiss chip for non-pill filters |
+| PR/CI data collection | Not implemented in scanner yet, types ready | WorkspaceView renders when available, graceful with empty data |
+| Workspace relativeTime | Single function with verbose/terse format option | Terse for compact cards, verbose for general use, no code duplication |
+| Attention item model | Typed objects with severity + optional filter link | Clickable items that set workspace filter, colors by severity |
+| Workspace memoization | All derived state wrapped in useMemo | Proper practice even at current scale |
