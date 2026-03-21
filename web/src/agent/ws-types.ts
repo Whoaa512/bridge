@@ -8,6 +8,14 @@ export interface SessionInfo {
   state: "idle" | "streaming" | "compacting";
 }
 
+export interface HistoricalSession {
+  id: string;
+  cwd: string;
+  timestamp: string;
+  model: string;
+  topic: string;
+}
+
 export type BridgeWSCommand =
   | { type: "session_create"; cwd: string; model?: string; projectId?: string }
   | { type: "session_destroy"; sessionId: string }
@@ -18,7 +26,8 @@ export type BridgeWSCommand =
   | { type: "project_opt_out"; path: string }
   | { type: "project_pin"; path: string }
   | { type: "project_unpin"; path: string }
-  | { type: "project_search"; query: string };
+  | { type: "project_search"; query: string }
+  | { type: "session_history"; path: string };
 
 export type BridgeWSEvent =
   | { type: "full_sync"; spec: unknown }
@@ -32,4 +41,5 @@ export type BridgeWSEvent =
   | { type: "extension_ui_request"; sessionId: string; request: ExtensionUIRequest }
   | { type: "config_update"; focusedProjects: string[]; pinnedProjects: string[] }
   | { type: "project_search_results"; results: Array<{ name: string; path: string }> }
+  | { type: "session_history_results"; path: string; sessions: HistoricalSession[] }
   | { type: "error"; error: string };

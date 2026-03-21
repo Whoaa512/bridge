@@ -41,3 +41,7 @@ export function sendProjectUnpin(path: string) {
 export function sendProjectSearch(query: string) {
   _ws?.send({ type: "project_search", query });
 }
+
+export function sendSessionHistory(path: string) {
+  _ws?.send({ type: "session_history", path });
+}

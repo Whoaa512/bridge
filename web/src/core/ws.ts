@@ -1,5 +1,5 @@
 import type { BridgeSpec } from "./types";
-import type { SessionInfo } from "../agent/ws-types";
+import type { SessionInfo, HistoricalSession } from "../agent/ws-types";
 import type { AgentEvent, RpcResponse, ExtensionUIRequest } from "../agent/types";
 import { cacheSpec } from "./loader";
 
@@ -17,6 +17,7 @@ export interface WSCallbacks {
   onExtensionUIRequest?: (sessionId: string, request: ExtensionUIRequest) => void;
   onConfigUpdate?: (focusedProjects: string[], pinnedProjects: string[]) => void;
   onProjectSearchResults?: (results: Array<{ name: string; path: string }>) => void;
+  onSessionHistoryResults?: (path: string, sessions: HistoricalSession[]) => void;
 }
 
 export interface WSHandle {
@@ -75,6 +76,9 @@ export function connectWS(callbacks: WSCallbacks): WSHandle {
         break;
       case "project_search_results":
         callbacks.onProjectSearchResults?.(msg.results);
+        break;
+      case "session_history_results":
+        callbacks.onSessionHistoryResults?.(msg.path, msg.sessions);
         break;
     }
   }

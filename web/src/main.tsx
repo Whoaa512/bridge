@@ -174,6 +174,9 @@ const ws = connectWS({
   onProjectSearchResults: (results) => {
     useBridgeStore.getState().setProjectSearchResults(results);
   },
+  onSessionHistoryResults: (path, sessions) => {
+    useBridgeStore.getState().setSessionHistory(path, sessions);
+  },
 });
 
 setWSHandle(ws);

@@ -335,3 +335,34 @@ describe("Project Search Results", () => {
     expect(useBridgeStore.getState().projectSearchResults).toEqual([]);
   });
 });
+
+describe("Session History", () => {
+  test("initial state is empty map", () => {
+    expect(useBridgeStore.getState().sessionHistory.size).toBe(0);
+  });
+
+  test("setSessionHistory stores sessions by path", () => {
+    const sessions = [
+      { id: "s1", cwd: "/code/bridge", timestamp: "2026-03-20T00:00:00Z", model: "claude", topic: "test" },
+    ];
+    useBridgeStore.getState().setSessionHistory("/code/bridge", sessions);
+    expect(useBridgeStore.getState().sessionHistory.get("/code/bridge")).toEqual(sessions);
+  });
+
+  test("setSessionHistory replaces existing sessions for same path", () => {
+    const old = [{ id: "s1", cwd: "/a", timestamp: "2026-03-19T00:00:00Z", model: "m1", topic: "old" }];
+    const updated = [{ id: "s2", cwd: "/a", timestamp: "2026-03-20T00:00:00Z", model: "m2", topic: "new" }];
+    useBridgeStore.getState().setSessionHistory("/a", old);
+    useBridgeStore.getState().setSessionHistory("/a", updated);
+    expect(useBridgeStore.getState().sessionHistory.get("/a")).toEqual(updated);
+  });
+
+  test("setSessionHistory keeps sessions for different paths", () => {
+    const s1 = [{ id: "s1", cwd: "/a", timestamp: "2026-03-20T00:00:00Z", model: "m", topic: "a" }];
+    const s2 = [{ id: "s2", cwd: "/b", timestamp: "2026-03-20T00:00:00Z", model: "m", topic: "b" }];
+    useBridgeStore.getState().setSessionHistory("/a", s1);
+    useBridgeStore.getState().setSessionHistory("/b", s2);
+    expect(useBridgeStore.getState().sessionHistory.get("/a")).toEqual(s1);
+    expect(useBridgeStore.getState().sessionHistory.get("/b")).toEqual(s2);
+  });
+});

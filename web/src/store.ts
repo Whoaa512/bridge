@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { BridgeSpec } from "./core/types";
-import type { SessionInfo } from "./agent/ws-types";
+import type { SessionInfo, HistoricalSession } from "./agent/ws-types";
 import type { ExtensionUIRequest } from "./agent/types";
 
 export type View = "complexity" | "workspace" | "sessions";
@@ -63,6 +63,9 @@ export interface BridgeStore {
 
   projectSearchResults: Array<{ name: string; path: string }>;
   setProjectSearchResults: (results: Array<{ name: string; path: string }>) => void;
+
+  sessionHistory: Map<string, HistoricalSession[]>;
+  setSessionHistory: (path: string, sessions: HistoricalSession[]) => void;
 }
 
 export const useBridgeStore = create<BridgeStore>((set, get) => ({
@@ -197,4 +200,11 @@ export const useBridgeStore = create<BridgeStore>((set, get) => ({
 
   projectSearchResults: [],
   setProjectSearchResults: (results) => set({ projectSearchResults: results }),
+
+  sessionHistory: new Map(),
+  setSessionHistory: (path, sessions) => {
+    const next = new Map(get().sessionHistory);
+    next.set(path, sessions);
+    set({ sessionHistory: next });
+  },
 }));
