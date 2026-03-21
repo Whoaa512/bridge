@@ -59,6 +59,8 @@ function ProjectGroup({ project, sessions, activeSessionId, onSelect, onNew, pin
 
   useEffect(() => {
     if (!expanded || historyRequested) return;
+    const history = useBridgeStore.getState().sessionHistory;
+    if (history.has(project.path)) return;
     setHistoryRequested(true);
     sendSessionHistory(project.path);
   }, [expanded, historyRequested, project.path]);

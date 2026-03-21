@@ -90,6 +90,7 @@ func NewDefault(scanRoots []string) *Config {
 }
 
 func (c *Config) HasFocusedProject(id string) bool {
+	id = expandHome(id)
 	return slices.Contains(c.FocusedProjects, id)
 }
 
@@ -102,15 +103,18 @@ func (c *Config) AddFocusedProject(id string) {
 }
 
 func (c *Config) RemoveFocusedProject(id string) {
+	id = expandHome(id)
 	c.FocusedProjects = slices.DeleteFunc(c.FocusedProjects, func(s string) bool { return s == id })
 	c.RemovePinnedProject(id)
 }
 
 func (c *Config) HasPinnedProject(id string) bool {
+	id = expandHome(id)
 	return slices.Contains(c.PinnedProjects, id)
 }
 
 func (c *Config) AddPinnedProject(id string) {
+	id = expandHome(id)
 	if c.HasPinnedProject(id) {
 		return
 	}
@@ -118,10 +122,12 @@ func (c *Config) AddPinnedProject(id string) {
 }
 
 func (c *Config) RemovePinnedProject(id string) {
+	id = expandHome(id)
 	c.PinnedProjects = slices.DeleteFunc(c.PinnedProjects, func(s string) bool { return s == id })
 }
 
 func (c *Config) TogglePinProject(id string) {
+	id = expandHome(id)
 	if c.HasPinnedProject(id) {
 		c.RemovePinnedProject(id)
 		return

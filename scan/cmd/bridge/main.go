@@ -189,14 +189,6 @@ func runServe() {
 	var opts []server.Option
 	opts = append(opts, server.WithConfig(cfg))
 
-	walkResult := discover.Walk(cfg.ScanRoots, cfg.Ignore)
-	repoIndex := make([]server.RepoEntry, 0, len(walkResult.Projects))
-	for _, p := range walkResult.Projects {
-		repoIndex = append(repoIndex, server.RepoEntry{Name: p.Name, Path: p.Path})
-	}
-	opts = append(opts, server.WithRepoIndex(repoIndex))
-	fmt.Fprintf(os.Stderr, "Indexed %d repos for ⌘K search\n", len(repoIndex))
-
 	if webDir != "" {
 		fmt.Fprintf(os.Stderr, "Serving web UI from %s\n", webDir)
 		opts = append(opts, server.WithWebDir(webDir))
@@ -206,6 +198,16 @@ func runServe() {
 
 	srv := server.New(port, opts...)
 	srv.SetSpec(s)
+
+	go func() {
+		walkResult := discover.Walk(cfg.ScanRoots, cfg.Ignore)
+		repoIndex := make([]server.RepoEntry, 0, len(walkResult.Projects))
+		for _, p := range walkResult.Projects {
+			repoIndex = append(repoIndex, server.RepoEntry{Name: p.Name, Path: p.Path})
+		}
+		srv.SetRepoIndex(repoIndex)
+		fmt.Fprintf(os.Stderr, "Indexed %d repos for ⌘K search\n", len(repoIndex))
+	}()
 
 	home, _ := os.UserHomeDir()
 	manifestPath := filepath.Join(home, ".bridge", "sessions", "active.json")
@@ -288,8 +290,13 @@ func runServe() {
 	}
 	w.SetScanning(false)
 
-	srv.SetOnConfigChange(func() {
-		updated := scanWithConfig(cfg, cache)
+	srv.SetOnConfigChange(func(focusedPaths []string) {
+		var updated *spec.BridgeSpec
+		if len(focusedPaths) > 0 {
+			updated = discover.BuildSpecForPaths(focusedPaths, cfg, cache)
+		} else {
+			updated = discover.BuildSpec(cfg, cache)
+		}
 		if err := spec.Emit(updated); err != nil {
 			fmt.Fprintf(os.Stderr, "error writing spec on config change: %v\n", err)
 			return

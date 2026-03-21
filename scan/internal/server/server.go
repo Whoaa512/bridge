@@ -47,7 +47,8 @@ type Server struct {
 	cfgMu          sync.Mutex
 	sessions       *agent.SessionManager
 	cfg            *config.Config
-	onConfigChange func()
+	onConfigChange func(focusedPaths []string)
+	repoMu         sync.RWMutex
 	repoIndex      []RepoEntry
 }
 
@@ -95,7 +96,7 @@ func WithConfig(cfg *config.Config) Option {
 	return func(s *Server) { s.cfg = cfg }
 }
 
-func WithOnConfigChange(fn func()) Option {
+func WithOnConfigChange(fn func([]string)) Option {
 	return func(s *Server) { s.onConfigChange = fn }
 }
 
@@ -103,8 +104,14 @@ func WithRepoIndex(repos []RepoEntry) Option {
 	return func(s *Server) { s.repoIndex = repos }
 }
 
-func (s *Server) SetOnConfigChange(fn func()) {
+func (s *Server) SetOnConfigChange(fn func([]string)) {
 	s.onConfigChange = fn
+}
+
+func (s *Server) SetRepoIndex(repos []RepoEntry) {
+	s.repoMu.Lock()
+	s.repoIndex = repos
+	s.repoMu.Unlock()
 }
 
 func isLocalOrigin(origin string) bool {
@@ -537,7 +544,12 @@ func (s *Server) handleProjectSearch(c *wsClient, raw []byte) {
 
 	query := strings.ToLower(req.Query)
 	var results []RepoEntry
-	for _, r := range s.repoIndex {
+
+	s.repoMu.RLock()
+	repos := s.repoIndex
+	s.repoMu.RUnlock()
+
+	for _, r := range repos {
 		if strings.Contains(strings.ToLower(r.Name), query) || strings.Contains(strings.ToLower(r.Path), query) {
 			results = append(results, r)
 			if len(results) >= 30 {
@@ -562,7 +574,9 @@ func (s *Server) saveAndBroadcastConfig(c *wsClient) {
 	}
 	s.broadcastConfigUpdate()
 	if s.onConfigChange != nil {
-		go s.onConfigChange()
+		paths := make([]string, len(s.cfg.FocusedProjects))
+		copy(paths, s.cfg.FocusedProjects)
+		go s.onConfigChange(paths)
 	}
 }
 
