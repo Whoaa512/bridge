@@ -4,7 +4,6 @@ const VIEW_PATHS: Record<View, string> = {
   sessions: "/",
   complexity: "/complexity",
   workspace: "/workspace",
-  colony: "/colony",
 };
 
 const PATH_TO_VIEW = new Map(

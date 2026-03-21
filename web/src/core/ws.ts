@@ -15,6 +15,7 @@ export interface WSCallbacks {
   onPiEvent?: (sessionId: string, event: AgentEvent) => void;
   onPiResponse?: (sessionId: string, response: RpcResponse) => void;
   onExtensionUIRequest?: (sessionId: string, request: ExtensionUIRequest) => void;
+  onConfigUpdate?: (focusedProjects: string[], pinnedProjects: string[]) => void;
 }
 
 export interface WSHandle {
@@ -67,6 +68,9 @@ export function connectWS(callbacks: WSCallbacks): WSHandle {
         break;
       case "extension_ui_request":
         callbacks.onExtensionUIRequest?.(msg.sessionId, msg.request);
+        break;
+      case "config_update":
+        callbacks.onConfigUpdate?.(msg.focusedProjects, msg.pinnedProjects);
         break;
     }
   }

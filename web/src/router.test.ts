@@ -20,12 +20,12 @@ describe("viewFromPath", () => {
     expect(viewFromPath("/workspace")).toBe("workspace");
   });
 
-  test("/colony maps to colony", () => {
-    expect(viewFromPath("/colony")).toBe("colony");
-  });
-
   test("/complexity maps to complexity", () => {
     expect(viewFromPath("/complexity")).toBe("complexity");
+  });
+
+  test("/colony falls back to sessions", () => {
+    expect(viewFromPath("/colony")).toBe("sessions");
   });
 
   test("unknown path falls back to sessions", () => {
@@ -40,8 +40,8 @@ describe("pushView", () => {
   });
 
   test("does not push if already on path", () => {
-    (globalThis as any).window.location.pathname = "/colony";
-    pushView("colony");
+    (globalThis as any).window.location.pathname = "/workspace";
+    pushView("workspace");
     expect(pushStateMock).not.toHaveBeenCalled();
   });
 

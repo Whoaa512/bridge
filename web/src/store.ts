@@ -3,7 +3,7 @@ import type { BridgeSpec } from "./core/types";
 import type { SessionInfo } from "./agent/ws-types";
 import type { ExtensionUIRequest } from "./agent/types";
 
-export type View = "complexity" | "workspace" | "colony" | "sessions";
+export type View = "complexity" | "workspace" | "sessions";
 
 export interface ToolCallInfo {
   id: string;
@@ -49,6 +49,14 @@ export interface BridgeStore {
 
   expandedProjects: Set<string>;
   toggleProjectExpanded: (projectId: string) => void;
+
+  focusedProjectIds: Set<string>;
+  pinnedProjectIds: Set<string>;
+  setFocusedProjects: (ids: string[]) => void;
+  setPinnedProjects: (ids: string[]) => void;
+  addFocusedProject: (id: string) => void;
+  removeFocusedProject: (id: string) => void;
+  togglePinProject: (id: string) => void;
 }
 
 export const useBridgeStore = create<BridgeStore>((set, get) => ({
@@ -150,5 +158,31 @@ export const useBridgeStore = create<BridgeStore>((set, get) => ({
       next.add(projectId);
     }
     set({ expandedProjects: next });
+  },
+
+  focusedProjectIds: new Set<string>(),
+  pinnedProjectIds: new Set<string>(),
+  setFocusedProjects: (ids) => set({ focusedProjectIds: new Set(ids) }),
+  setPinnedProjects: (ids) => set({ pinnedProjectIds: new Set(ids) }),
+  addFocusedProject: (id) => {
+    const next = new Set(get().focusedProjectIds);
+    next.add(id);
+    set({ focusedProjectIds: next });
+  },
+  removeFocusedProject: (id) => {
+    const focused = new Set(get().focusedProjectIds);
+    focused.delete(id);
+    const pinned = new Set(get().pinnedProjectIds);
+    pinned.delete(id);
+    set({ focusedProjectIds: focused, pinnedProjectIds: pinned });
+  },
+  togglePinProject: (id) => {
+    const next = new Set(get().pinnedProjectIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    set({ pinnedProjectIds: next });
   },
 }));

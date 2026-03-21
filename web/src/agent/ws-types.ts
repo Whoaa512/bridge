@@ -13,7 +13,11 @@ export type BridgeWSCommand =
   | { type: "session_destroy"; sessionId: string }
   | { type: "sessions_list_request" }
   | { type: "pi_command"; sessionId: string; command: object }
-  | { type: "extension_ui_response"; sessionId: string; response: object };
+  | { type: "extension_ui_response"; sessionId: string; response: object }
+  | { type: "project_opt_in"; projectId: string }
+  | { type: "project_opt_out"; projectId: string }
+  | { type: "project_pin"; projectId: string }
+  | { type: "project_unpin"; projectId: string };
 
 export type BridgeWSEvent =
   | { type: "full_sync"; spec: unknown }
@@ -25,4 +29,5 @@ export type BridgeWSEvent =
   | { type: "pi_event"; sessionId: string; event: AgentEvent }
   | { type: "pi_response"; sessionId: string; response: RpcResponse }
   | { type: "extension_ui_request"; sessionId: string; request: ExtensionUIRequest }
+  | { type: "config_update"; focusedProjects: string[]; pinnedProjects: string[] }
   | { type: "error"; error: string };

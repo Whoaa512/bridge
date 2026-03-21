@@ -21,3 +21,19 @@ export function sendSessionCreate(cwd: string, projectId?: string) {
 export function sendSessionDestroy(sessionId: string) {
   _ws?.send({ type: "session_destroy", sessionId });
 }
+
+export function sendProjectOptIn(projectId: string) {
+  _ws?.send({ type: "project_opt_in", projectId });
+}
+
+export function sendProjectOptOut(projectId: string) {
+  _ws?.send({ type: "project_opt_out", projectId });
+}
+
+export function sendProjectPin(projectId: string) {
+  _ws?.send({ type: "project_pin", projectId });
+}
+
+export function sendProjectUnpin(projectId: string) {
+  _ws?.send({ type: "project_unpin", projectId });
+}

@@ -41,6 +41,8 @@ beforeEach(() => {
     messages: new Map(),
     activeSessionId: null,
     extensionUIRequest: null,
+    focusedProjectIds: new Set<string>(),
+    pinnedProjectIds: new Set<string>(),
   });
 });
 
@@ -64,9 +66,6 @@ describe("BridgeStore", () => {
   test("setActiveView switches view", () => {
     useBridgeStore.getState().setActiveView("workspace");
     expect(useBridgeStore.getState().activeView).toBe("workspace");
-
-    useBridgeStore.getState().setActiveView("colony");
-    expect(useBridgeStore.getState().activeView).toBe("colony");
 
     useBridgeStore.getState().setActiveView("sessions");
     expect(useBridgeStore.getState().activeView).toBe("sessions");
@@ -260,5 +259,52 @@ describe("Extension UI Request", () => {
 
     useBridgeStore.getState().setExtensionUIRequest(null);
     expect(useBridgeStore.getState().extensionUIRequest).toBeNull();
+  });
+});
+
+describe("Focus & Pin Projects", () => {
+  test("setFocusedProjects sets from array", () => {
+    useBridgeStore.getState().setFocusedProjects(["p1", "p2"]);
+    const ids = useBridgeStore.getState().focusedProjectIds;
+    expect(ids.size).toBe(2);
+    expect(ids.has("p1")).toBe(true);
+    expect(ids.has("p2")).toBe(true);
+  });
+
+  test("setPinnedProjects sets from array", () => {
+    useBridgeStore.getState().setPinnedProjects(["p1", "p3"]);
+    const ids = useBridgeStore.getState().pinnedProjectIds;
+    expect(ids.size).toBe(2);
+    expect(ids.has("p1")).toBe(true);
+    expect(ids.has("p3")).toBe(true);
+  });
+
+  test("addFocusedProject adds to existing set", () => {
+    useBridgeStore.getState().setFocusedProjects(["p1"]);
+    useBridgeStore.getState().addFocusedProject("p2");
+
+    const ids = useBridgeStore.getState().focusedProjectIds;
+    expect(ids.size).toBe(2);
+    expect(ids.has("p1")).toBe(true);
+    expect(ids.has("p2")).toBe(true);
+  });
+
+  test("removeFocusedProject removes from both focused and pinned", () => {
+    useBridgeStore.getState().setFocusedProjects(["p1", "p2"]);
+    useBridgeStore.getState().setPinnedProjects(["p1"]);
+
+    useBridgeStore.getState().removeFocusedProject("p1");
+
+    expect(useBridgeStore.getState().focusedProjectIds.has("p1")).toBe(false);
+    expect(useBridgeStore.getState().focusedProjectIds.has("p2")).toBe(true);
+    expect(useBridgeStore.getState().pinnedProjectIds.has("p1")).toBe(false);
+  });
+
+  test("togglePinProject toggles pin state", () => {
+    useBridgeStore.getState().togglePinProject("p1");
+    expect(useBridgeStore.getState().pinnedProjectIds.has("p1")).toBe(true);
+
+    useBridgeStore.getState().togglePinProject("p1");
+    expect(useBridgeStore.getState().pinnedProjectIds.has("p1")).toBe(false);
   });
 });

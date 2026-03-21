@@ -8,7 +8,7 @@ import { useBridgeStore, type View } from "./store";
 import { setWSHandle } from "./agent/commands";
 import type { AgentEvent } from "./agent/types";
 
-const CANVAS_VIEWS: Set<View> = new Set(["complexity", "colony"]);
+const CANVAS_VIEWS: Set<View> = new Set(["complexity"]);
 
 const appEl = document.getElementById("app");
 if (!appEl) throw new Error("#app not found");
@@ -21,7 +21,6 @@ const handle = initCanvas(canvas);
 
 const FILTER_BY_VIEW: Record<View, FilterMode> = {
   complexity: "default",
-  colony: "all",
   workspace: "default",
   sessions: "default",
 };
@@ -166,6 +165,11 @@ const ws = connectWS({
   onPiEvent: handlePiEvent,
   onExtensionUIRequest: (sessionId, request) => {
     useBridgeStore.getState().setExtensionUIRequest({ sessionId, request });
+  },
+  onConfigUpdate: (focusedProjects, pinnedProjects) => {
+    const store = useBridgeStore.getState();
+    store.setFocusedProjects(focusedProjects);
+    store.setPinnedProjects(pinnedProjects);
   },
 });
 

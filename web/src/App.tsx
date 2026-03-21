@@ -8,7 +8,6 @@ const TABS: { view: View; label: string; key: string }[] = [
   { view: "sessions", label: "Sessions", key: "1" },
   { view: "workspace", label: "Workspace", key: "2" },
   { view: "complexity", label: "Complexity", key: "3" },
-  { view: "colony", label: "Colony", key: "4" },
 ];
 
 function isInputFocused(): boolean {
