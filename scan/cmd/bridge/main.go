@@ -93,6 +93,7 @@ func doScan(cfg *config.Config) *spec.BridgeSpec {
 func runScan() {
 	cfg := loadOrOnboard()
 	s := doScan(cfg)
+	cfg.SeedFocusedProjects(s.Projects)
 
 	jsonFlag := slices.Contains(os.Args[2:], "--json")
 
@@ -171,6 +172,7 @@ func runServe() {
 
 	fmt.Fprintf(os.Stderr, "Scanning...\n")
 	s := discover.BuildSpec(cfg, cache)
+	cfg.SeedFocusedProjects(s.Projects)
 	fmt.Fprintf(os.Stderr, "Found %d projects\n", len(s.Projects))
 
 	if err := spec.Emit(s); err != nil {
@@ -180,6 +182,7 @@ func runServe() {
 	}
 
 	var opts []server.Option
+	opts = append(opts, server.WithConfig(cfg))
 	if webDir != "" {
 		fmt.Fprintf(os.Stderr, "Serving web UI from %s\n", webDir)
 		opts = append(opts, server.WithWebDir(webDir))

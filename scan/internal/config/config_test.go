@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/cjwinslow/bridge/scan/internal/spec"
 )
 
 func TestOnboarding(t *testing.T) {
@@ -195,5 +198,79 @@ func TestFocusedProjectsPersistence(t *testing.T) {
 	}
 	if !loaded.HasPinnedProject("project:a") {
 		t.Error("pinned project not persisted")
+	}
+}
+
+func TestSeedFocusedProjects(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	now := time.Now()
+	recent := now.Add(-3 * 24 * time.Hour)
+	stale := now.Add(-30 * 24 * time.Hour)
+
+	projects := []spec.Project{
+		{ID: "active-uncommitted", Kind: "standalone", Git: &spec.GitStatus{Uncommitted: 2, LastCommit: stale}},
+		{ID: "active-recent", Kind: "standalone", Git: &spec.GitStatus{LastCommit: recent}},
+		{ID: "stale-project", Kind: "standalone", Git: &spec.GitStatus{LastCommit: stale}},
+		{ID: "mono-child", Kind: "monorepo_child", Git: &spec.GitStatus{Uncommitted: 5, LastCommit: recent}},
+		{ID: "no-git", Kind: "standalone"},
+	}
+
+	cfg := NewDefault([]string{"/code"})
+	cfg.SeedFocusedProjects(projects)
+
+	if len(cfg.FocusedProjects) != 2 {
+		t.Fatalf("got %d focused, want 2: %v", len(cfg.FocusedProjects), cfg.FocusedProjects)
+	}
+	if !cfg.HasFocusedProject("active-uncommitted") {
+		t.Error("expected active-uncommitted to be focused")
+	}
+	if !cfg.HasFocusedProject("active-recent") {
+		t.Error("expected active-recent to be focused")
+	}
+	if cfg.HasFocusedProject("stale-project") {
+		t.Error("stale-project should not be focused")
+	}
+	if cfg.HasFocusedProject("mono-child") {
+		t.Error("monorepo_child should not be focused")
+	}
+	if cfg.HasFocusedProject("no-git") {
+		t.Error("no-git should not be focused")
+	}
+}
+
+func TestSeedFocusedProjectsNoopWhenPopulated(t *testing.T) {
+	cfg := NewDefault([]string{"/code"})
+	cfg.FocusedProjects = []string{"existing-project"}
+
+	projects := []spec.Project{
+		{ID: "active", Kind: "standalone", Git: &spec.GitStatus{Uncommitted: 1}},
+	}
+
+	cfg.SeedFocusedProjects(projects)
+
+	if len(cfg.FocusedProjects) != 1 || cfg.FocusedProjects[0] != "existing-project" {
+		t.Errorf("seed should be noop when populated, got %v", cfg.FocusedProjects)
+	}
+}
+
+func TestSeedFocusedProjectsSavesToDisk(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	projects := []spec.Project{
+		{ID: "active", Kind: "standalone", Git: &spec.GitStatus{Uncommitted: 1}},
+	}
+
+	cfg := NewDefault([]string{"/code"})
+	cfg.SeedFocusedProjects(projects)
+
+	loaded, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !loaded.HasFocusedProject("active") {
+		t.Error("seeded project not persisted to disk")
 	}
 }

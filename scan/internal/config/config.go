@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"time"
+
+	"github.com/cjwinslow/bridge/scan/internal/spec"
 )
 
 type Config struct {
@@ -118,4 +121,36 @@ func (c *Config) TogglePinProject(id string) {
 		return
 	}
 	c.AddPinnedProject(id)
+}
+
+func (c *Config) SeedFocusedProjects(projects []spec.Project) {
+	if len(c.FocusedProjects) > 0 {
+		return
+	}
+
+	cutoff := time.Now().Add(-14 * 24 * time.Hour)
+
+	for _, p := range projects {
+		if p.Kind == "monorepo_child" {
+			continue
+		}
+		if !isActive(p, cutoff) {
+			continue
+		}
+		c.FocusedProjects = append(c.FocusedProjects, p.ID)
+	}
+
+	if len(c.FocusedProjects) > 0 {
+		c.Save()
+	}
+}
+
+func isActive(p spec.Project, cutoff time.Time) bool {
+	if p.Git == nil {
+		return false
+	}
+	if p.Git.Uncommitted > 0 {
+		return true
+	}
+	return p.Git.LastCommit.After(cutoff)
 }
