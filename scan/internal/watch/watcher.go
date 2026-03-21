@@ -2,6 +2,7 @@ package watch
 
 import (
 	"log"
+	"log/slog"
 	"path/filepath"
 	"sync"
 	"time"
@@ -111,7 +112,7 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 	defer w.mu.Unlock()
 
 	if w.suppressed() {
-		log.Printf("[watch] suppressed event: %s %s", event.Op, event.Name)
+		slog.Debug("[watch] suppressed event", "op", event.Op, "name", event.Name)
 		return
 	}
 
@@ -124,7 +125,7 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 		}
 	}
 
-	log.Printf("[watch] %s %s → project %s", event.Op, base, filepath.Base(projectPath))
+	slog.Debug("[watch] event", "op", event.Op, "file", base, "project", filepath.Base(projectPath))
 	w.pending[projectPath] = time.Now()
 }
 
@@ -156,7 +157,7 @@ func (w *Watcher) flushPending() {
 			delete(w.pending, p)
 		}
 		if n > 0 {
-			log.Printf("[watch] dropped %d pending events (suppressed)", n)
+			slog.Debug("[watch] dropped pending events (suppressed)", "count", n)
 		}
 		w.mu.Unlock()
 		return
