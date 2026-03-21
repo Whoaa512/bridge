@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { filterWorkspaceProjects, isPillFilter, filterLabel } from "./filter-utils";
+import { filterWorkspaceProjects, sortWorkspaceProjects, isPillFilter, filterLabel } from "./filter-utils";
 import type { Project } from "../../core/types";
 import type { SessionInfo } from "../../agent/ws-types";
 
@@ -124,5 +124,55 @@ describe("filterLabel", () => {
     expect(filterLabel("uncommitted")).toBe("Uncommitted");
     expect(filterLabel("behind_remote")).toBe("Behind Remote");
     expect(filterLabel("failing_ci")).toBe("Failing CI");
+  });
+});
+
+describe("sortWorkspaceProjects", () => {
+  const sortProjects: Project[] = [
+    makeProject({ id: "s1", name: "Zulu", activity: { staleDays: 2, lastTouch: "2025-01-10T00:00:00Z" } as any }),
+    makeProject({ id: "s2", name: "Alpha", activity: { staleDays: 0, lastTouch: "2025-01-15T00:00:00Z" } as any }),
+    makeProject({ id: "s3", name: "Mike", activity: null }),
+    makeProject({ id: "s4", name: "Bravo", activity: { staleDays: 20, lastTouch: "2024-12-01T00:00:00Z" } as any }),
+    makeProject({
+      id: "s5", name: "Charlie",
+      activity: { staleDays: 1, lastTouch: "2025-01-12T00:00:00Z" } as any,
+      git: { branch: "main", branches: [], uncommitted: 3, ahead: 0, behind: 0, stashCount: 0, lastCommit: "", remoteUrl: null } as any,
+    }),
+    makeProject({
+      id: "s6", name: "Delta",
+      activity: { staleDays: 30, lastTouch: "2024-11-01T00:00:00Z" } as any,
+      git: { branch: "main", branches: [], uncommitted: 7, ahead: 0, behind: 0, stashCount: 0, lastCommit: "", remoteUrl: null } as any,
+    }),
+  ];
+
+  test("activity sort: non-stale by lastTouch desc, then stale, no-activity last within group", () => {
+    const result = sortWorkspaceProjects(sortProjects, "activity");
+    expect(result.map((p) => p.id)).toEqual(["s2", "s5", "s1", "s3", "s4", "s6"]);
+  });
+
+  test("name sort: non-stale alphabetical, then stale alphabetical", () => {
+    const result = sortWorkspaceProjects(sortProjects, "name");
+    expect(result.map((p) => p.id)).toEqual(["s2", "s5", "s3", "s1", "s4", "s6"]);
+  });
+
+  test("uncommitted sort: uncommitted first (within non-stale), then rest by activity, stale last", () => {
+    const result = sortWorkspaceProjects(sortProjects, "uncommitted");
+    expect(result.map((p) => p.id)).toEqual(["s5", "s2", "s1", "s3", "s6", "s4"]);
+  });
+
+  test("stale projects always sort after non-stale", () => {
+    for (const sort of ["activity", "name", "uncommitted"] as const) {
+      const result = sortWorkspaceProjects(sortProjects, sort);
+      const staleIdx = result.findIndex((p) => (p.activity?.staleDays ?? 0) > 14);
+      const nonStaleAfterStale = result.slice(staleIdx).some((p) => (p.activity?.staleDays ?? 0) <= 14);
+      expect(nonStaleAfterStale).toBe(false);
+    }
+  });
+
+  test("projects without activity sort to bottom of non-stale group in activity sort", () => {
+    const result = sortWorkspaceProjects(sortProjects, "activity");
+    const noActivity = result.find((p) => p.id === "s3")!;
+    const lastNonStale = result.filter((p) => (p.activity?.staleDays ?? 0) <= 14).pop()!;
+    expect(noActivity.id).toBe(lastNonStale.id);
   });
 });

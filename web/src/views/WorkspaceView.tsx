@@ -10,7 +10,7 @@ import { computeAttentionItems } from "./workspace/attention-utils";
 import StatsBar from "./workspace/StatsBar";
 import SearchFilter from "./workspace/SearchFilter";
 import ProjectCard from "./workspace/ProjectCard";
-import { filterWorkspaceProjects, type WorkspaceFilter } from "./workspace/filter-utils";
+import { filterWorkspaceProjects, sortWorkspaceProjects, type WorkspaceFilter, type WorkspaceSort } from "./workspace/filter-utils";
 
 export default function WorkspaceView() {
   const spec = useBridgeStore((s) => s.spec);
@@ -29,6 +29,7 @@ export default function WorkspaceView() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<WorkspaceFilter>("all");
+  const [activeSort, setActiveSort] = useState<WorkspaceSort>("activity");
 
   const handleCardClick = useCallback((project: Project, projectSessions?: SessionInfo[]) => {
     const store = useBridgeStore.getState();
@@ -57,8 +58,11 @@ export default function WorkspaceView() {
   }), [projects, sessions]);
 
   const filtered = useMemo(
-    () => filterWorkspaceProjects(projects, activeFilter, searchQuery, sessionsByProject),
-    [projects, activeFilter, searchQuery, sessionsByProject],
+    () => sortWorkspaceProjects(
+      filterWorkspaceProjects(projects, activeFilter, searchQuery, sessionsByProject),
+      activeSort,
+    ),
+    [projects, activeFilter, searchQuery, sessionsByProject, activeSort],
   );
 
   if (!spec) {
@@ -79,6 +83,8 @@ export default function WorkspaceView() {
         onSearchChange={setSearchQuery}
         activeFilter={activeFilter}
         onFilterChange={setActiveFilter}
+        activeSort={activeSort}
+        onSortChange={setActiveSort}
       />
       <div style={styles.grid}>
         {filtered.map((p) => {
