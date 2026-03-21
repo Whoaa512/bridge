@@ -51,7 +51,7 @@ export interface BridgeStore {
 export const useBridgeStore = create<BridgeStore>((set, get) => ({
   spec: null,
   setSpec: (spec) => set({ spec }),
-  activeView: "complexity",
+  activeView: "sessions",
   setActiveView: (activeView) => set({ activeView }),
   wsConnected: false,
   setWsConnected: (wsConnected) => set({ wsConnected }),

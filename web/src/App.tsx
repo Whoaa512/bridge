@@ -5,10 +5,10 @@ import WorkspaceView from "./views/WorkspaceView";
 import SessionsView from "./views/SessionsView";
 
 const TABS: { view: View; label: string; key: string }[] = [
-  { view: "complexity", label: "Complexity", key: "1" },
+  { view: "sessions", label: "Sessions", key: "1" },
   { view: "workspace", label: "Workspace", key: "2" },
-  { view: "colony", label: "Colony", key: "3" },
-  { view: "sessions", label: "Sessions", key: "4" },
+  { view: "complexity", label: "Complexity", key: "3" },
+  { view: "colony", label: "Colony", key: "4" },
 ];
 
 function isInputFocused(): boolean {

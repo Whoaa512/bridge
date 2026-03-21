@@ -1,10 +1,10 @@
 import type { View } from "./store";
 
 const VIEW_PATHS: Record<View, string> = {
-  complexity: "/",
+  sessions: "/",
+  complexity: "/complexity",
   workspace: "/workspace",
   colony: "/colony",
-  sessions: "/sessions",
 };
 
 const PATH_TO_VIEW = new Map(
@@ -12,7 +12,7 @@ const PATH_TO_VIEW = new Map(
 );
 
 export function viewFromPath(pathname = window.location.pathname): View {
-  return PATH_TO_VIEW.get(pathname) ?? "complexity";
+  return PATH_TO_VIEW.get(pathname) ?? "sessions";
 }
 
 export function pushView(view: View) {
