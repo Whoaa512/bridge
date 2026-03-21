@@ -91,15 +91,48 @@ func countStashFromFS(repoPath string) int {
 }
 
 func getLastCommitFromFS(repoPath string) time.Time {
-	out, err := RunGitCmd(repoPath, "log", "-1", "--format=%aI")
+	data, err := os.ReadFile(filepath.Join(repoPath, ".git", "logs", "HEAD"))
 	if err != nil {
 		return time.Time{}
 	}
-	t, err := time.Parse(time.RFC3339, strings.TrimSpace(out))
-	if err != nil {
+
+	content := strings.TrimSpace(string(data))
+	if content == "" {
 		return time.Time{}
 	}
-	return t
+
+	lastNewline := strings.LastIndex(content, "\n")
+	var lastLine string
+	if lastNewline >= 0 {
+		lastLine = content[lastNewline+1:]
+	} else {
+		lastLine = content
+	}
+
+	// reflog line format: <old-sha> <new-sha> <name> <email> <unix-ts> <tz-offset>\t<message>
+	tab := strings.IndexByte(lastLine, '\t')
+	if tab < 0 {
+		return time.Time{}
+	}
+	meta := lastLine[:tab]
+
+	// find the timestamp: look for "> " which ends the email, then parse unix timestamp
+	emailEnd := strings.LastIndex(meta, "> ")
+	if emailEnd < 0 {
+		return time.Time{}
+	}
+	tsStr := strings.TrimSpace(meta[emailEnd+2:])
+	parts := strings.Fields(tsStr)
+	if len(parts) < 1 {
+		return time.Time{}
+	}
+
+	var unix int64
+	fmt.Sscanf(parts[0], "%d", &unix)
+	if unix == 0 {
+		return time.Time{}
+	}
+	return time.Unix(unix, 0).UTC()
 }
 
 func getRemoteURLFromFS(repoPath string) *string {

@@ -42,20 +42,33 @@ func collectSizeGit(projectPath string, ignores []string) *spec.Size {
 		return collectSizeWalk(projectPath, ignores)
 	}
 
+	ignoreSet := make(map[string]bool, len(ignores))
+	for _, ig := range ignores {
+		ignoreSet[ig] = true
+	}
+
 	size := &spec.Size{}
 	var sourceFiles []string
 
-	for _, f := range strings.Split(out, "\000") {
-		if f == "" {
+	start := 0
+	for i := 0; i <= len(out); i++ {
+		if i < len(out) && out[i] != 0 {
 			continue
 		}
+		if i == start {
+			start = i + 1
+			continue
+		}
+
+		f := out[start:i]
+		start = i + 1
 
 		ext := strings.ToLower(filepath.Ext(f))
 		if !sourceExts[ext] {
 			continue
 		}
 
-		if shouldSkipGitFile(f, ignores) {
+		if shouldSkipGitFile(f, ignoreSet) {
 			continue
 		}
 
@@ -96,19 +109,18 @@ func collectSizeGit(projectPath string, ignores []string) *spec.Size {
 	return size
 }
 
-func shouldSkipGitFile(relPath string, ignores []string) bool {
-	parts := strings.Split(relPath, "/")
-	for _, part := range parts[:len(parts)-1] {
-		if skipDirs[part] || strings.HasPrefix(part, "bazel-") {
+func shouldSkipGitFile(relPath string, ignoreSet map[string]bool) bool {
+	for {
+		slash := strings.IndexByte(relPath, '/')
+		if slash < 0 {
+			return false
+		}
+		dir := relPath[:slash]
+		if skipDirs[dir] || strings.HasPrefix(dir, "bazel-") || ignoreSet[dir] {
 			return true
 		}
-		for _, ig := range ignores {
-			if matched, _ := filepath.Match(ig, part); matched {
-				return true
-			}
-		}
+		relPath = relPath[slash+1:]
 	}
-	return false
 }
 
 func collectSizeWalk(projectPath string, ignores []string) *spec.Size {
