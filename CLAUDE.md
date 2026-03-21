@@ -8,10 +8,11 @@ Dev environment colony map + battle station: Go scanner → `~/.bridge/spec.json
 - Scanner only: `cd scan && go build ./cmd/bridge/ && ./bridge scan`
 - Web only: `cd web && bun run dev` (proxies `/api/*` and `/ws` → `:7400`)
 - All mise tasks: `mise tasks` (dev, build, test, lint)
+- Benchmark scanner: `cd scan && go build ./cmd/bridge/ && time ./bridge scan 2>&1 >/dev/null`
 
 ## Test
 
-- Scanner: `cd scan && go test ./...`
+- Scanner: `cd scan && go test ./... -count=1`
 - Web: `cd web && bun test`
 - ⚠️ `mise run test` and `mise run lint` have a CWD bug (`cd scan` then `cd web` fails). Run separately.
 
@@ -33,7 +34,11 @@ Dev environment colony map + battle station: Go scanner → `~/.bridge/spec.json
 
 ## Architecture
 
-- Scanner: `cmd/bridge/main.go` → `discover.Walk()` → `git.Stats()` → `discover.CollectSize()` → `spec.Emit()`
+- Scanner: `cmd/bridge/main.go` → `discover.Walk()` → `git.GetStats()` → `discover.CollectSize()` → `spec.Emit()`
+  - Walk: finds git repos under scan roots (~50ms for 108 repos)
+  - BuildSpec: parallel workers (up to 8) process each repo
+  - Per repo: `git status --porcelain --branch` + `git ls-files -z` (2 subprocesses), rest is filesystem reads
+  - Monorepo children: skip LOC counting (parent already counted), only count deps
 - Web: React shell (`App.tsx`) with 4 tab views: Complexity, Workspace, Colony, Sessions
   - Canvas views (Complexity, Colony): tab bar only, canvas visible + interactive
   - Panel views (Workspace, Sessions): canvas hidden, React renders full panel
@@ -43,6 +48,16 @@ Dev environment colony map + battle station: Go scanner → `~/.bridge/spec.json
 - URL routing: hand-rolled pushState (`/`, `/workspace`, `/colony`, `/sessions`)
 - fsnotify watches `.git/` dirs; CHMOD events are ignored (always noise); noisy git internal files (fsmonitor, lock files, FETCH_HEAD) are filtered
 - Agent sessions will be managed by Go server directly (no separate sidecar) — see `docs/BATTLE-STATION.md`
+
+## Scanner Performance
+
+Scans ~108 git repos + 617 monorepo children in ~4s. Key design choices:
+- **git ls-files** over filepath.Walk — reads git index directly, avoids stat() per file
+- **Tiered LOC counting**: exact (≤500 files), sampled 200 files (≤5K), heuristic `files×40` (>5K). `Size.Approx` flag when estimated.
+- **Filesystem reads over git subprocesses**: stash from `.git/logs/refs/stash`, branches from `.git/refs/heads/`, remote URL from `.git/config`, last commit from `.git/logs/HEAD`
+- **shouldSkipGitFile**: uses `IndexByte` scanning + map lookup (was 40% of CPU with filepath.Match)
+- **countCommitsThisWeek**: skipped entirely if last commit > 7 days ago
+- ⚠️ **Cache is NOT wired up** — `watch/cache.go` exists (TTL tiers, invalidation) but `BuildSpec` never uses it. Every rescan recomputes all 725 projects. Wiring cache = rescans in ~50ms instead of ~4s.
 
 ## Web Conventions
 
