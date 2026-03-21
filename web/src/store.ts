@@ -60,6 +60,9 @@ export interface BridgeStore {
 
   showProjectSearch: boolean;
   setShowProjectSearch: (show: boolean) => void;
+
+  projectSearchResults: Array<{ name: string; path: string }>;
+  setProjectSearchResults: (results: Array<{ name: string; path: string }>) => void;
 }
 
 export const useBridgeStore = create<BridgeStore>((set, get) => ({
@@ -191,4 +194,7 @@ export const useBridgeStore = create<BridgeStore>((set, get) => ({
 
   showProjectSearch: false,
   setShowProjectSearch: (show) => set({ showProjectSearch: show }),
+
+  projectSearchResults: [],
+  setProjectSearchResults: (results) => set({ projectSearchResults: results }),
 }));

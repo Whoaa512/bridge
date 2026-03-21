@@ -16,6 +16,7 @@ export interface WSCallbacks {
   onPiResponse?: (sessionId: string, response: RpcResponse) => void;
   onExtensionUIRequest?: (sessionId: string, request: ExtensionUIRequest) => void;
   onConfigUpdate?: (focusedProjects: string[], pinnedProjects: string[]) => void;
+  onProjectSearchResults?: (results: Array<{ name: string; path: string }>) => void;
 }
 
 export interface WSHandle {
@@ -71,6 +72,9 @@ export function connectWS(callbacks: WSCallbacks): WSHandle {
         break;
       case "config_update":
         callbacks.onConfigUpdate?.(msg.focusedProjects, msg.pinnedProjects);
+        break;
+      case "project_search_results":
+        callbacks.onProjectSearchResults?.(msg.results);
         break;
     }
   }

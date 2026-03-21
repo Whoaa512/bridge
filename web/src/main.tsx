@@ -171,6 +171,9 @@ const ws = connectWS({
     store.setFocusedPaths(focusedProjects);
     store.setPinnedPaths(pinnedProjects);
   },
+  onProjectSearchResults: (results) => {
+    useBridgeStore.getState().setProjectSearchResults(results);
+  },
 });
 
 setWSHandle(ws);

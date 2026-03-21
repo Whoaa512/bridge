@@ -308,3 +308,30 @@ describe("Focus & Pin Projects", () => {
     expect(useBridgeStore.getState().pinnedPaths.has("/code/p1")).toBe(false);
   });
 });
+
+describe("Project Search Results", () => {
+  test("initial state is empty array", () => {
+    expect(useBridgeStore.getState().projectSearchResults).toEqual([]);
+  });
+
+  test("setProjectSearchResults updates results", () => {
+    const results = [
+      { name: "bridge", path: "/code/bridge" },
+      { name: "dotfiles", path: "/code/dotfiles" },
+    ];
+    useBridgeStore.getState().setProjectSearchResults(results);
+    expect(useBridgeStore.getState().projectSearchResults).toEqual(results);
+  });
+
+  test("setProjectSearchResults replaces previous results", () => {
+    useBridgeStore.getState().setProjectSearchResults([{ name: "old", path: "/old" }]);
+    useBridgeStore.getState().setProjectSearchResults([{ name: "new", path: "/new" }]);
+    expect(useBridgeStore.getState().projectSearchResults).toEqual([{ name: "new", path: "/new" }]);
+  });
+
+  test("setProjectSearchResults can set empty", () => {
+    useBridgeStore.getState().setProjectSearchResults([{ name: "x", path: "/x" }]);
+    useBridgeStore.getState().setProjectSearchResults([]);
+    expect(useBridgeStore.getState().projectSearchResults).toEqual([]);
+  });
+});

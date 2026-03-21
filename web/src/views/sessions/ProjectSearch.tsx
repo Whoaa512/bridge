@@ -1,7 +1,6 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useBridgeStore } from "../../store";
-import type { Project } from "../../core/types";
-import { sendProjectOptIn, sendSessionCreate } from "../../agent/commands";
+import { sendProjectOptIn, sendProjectSearch } from "../../agent/commands";
 
 interface ProjectSearchProps {
   onClose: () => void;
@@ -12,44 +11,34 @@ export default function ProjectSearch({ onClose }: ProjectSearchProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const spec = useBridgeStore((s) => s.spec);
+  const results = useBridgeStore((s) => s.projectSearchResults);
   const focusedPaths = useBridgeStore((s) => s.focusedPaths);
-
-  const results = useMemo(() => {
-    const all = spec?.projects ?? [];
-    const filtered = all.filter((p) => p.kind !== "monorepo_child");
-    if (!query.trim()) return filtered.slice(0, 20);
-    const q = query.toLowerCase();
-    return filtered
-      .filter((p) => p.name.toLowerCase().includes(q) || p.path.toLowerCase().includes(q))
-      .slice(0, 20);
-  }, [spec, query]);
-
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
   useEffect(() => {
+    setSelectedIndex(0);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      sendProjectSearch(query);
+    }, 150);
+    return () => clearTimeout(debounceRef.current);
+  }, [query]);
+
+  useEffect(() => {
     const el = listRef.current?.children[selectedIndex] as HTMLElement | undefined;
     el?.scrollIntoView({ block: "nearest" });
   }, [selectedIndex]);
 
-  const selectProject = useCallback((project: Project) => {
+  const selectResult = useCallback((result: { name: string; path: string }) => {
     const store = useBridgeStore.getState();
 
-    if (!store.focusedPaths.has(project.path)) {
-      sendProjectOptIn(project.path);
-    }
-
-    sendSessionCreate(project.path, project.id);
-
-    if (!store.expandedProjects.has(project.id)) {
-      store.toggleProjectExpanded(project.id);
+    if (!store.focusedPaths.has(result.path)) {
+      sendProjectOptIn(result.path);
     }
 
     if (store.activeView !== "sessions") {
@@ -77,10 +66,10 @@ export default function ProjectSearch({ onClose }: ProjectSearchProps) {
     }
     if (e.key === "Enter") {
       e.preventDefault();
-      const project = results[selectedIndex];
-      if (project) selectProject(project);
+      const result = results[selectedIndex];
+      if (result) selectResult(result);
     }
-  }, [results, selectedIndex, selectProject, onClose]);
+  }, [results, selectedIndex, selectResult, onClose]);
 
   return (
     <div style={styles.backdrop} onMouseDown={onClose}>
@@ -91,27 +80,30 @@ export default function ProjectSearch({ onClose }: ProjectSearchProps) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Search all projects…"
+          placeholder="Search all repos…"
           style={styles.input}
         />
         <div ref={listRef} style={styles.list}>
-          {results.length === 0 && (
-            <div style={styles.empty}>No projects found</div>
+          {results.length === 0 && query.trim() && (
+            <div style={styles.empty}>No repos found</div>
           )}
-          {results.map((project, i) => {
-            const isFocused = focusedPaths.has(project.path);
+          {results.length === 0 && !query.trim() && (
+            <div style={styles.empty}>Type to search repos under your scan roots</div>
+          )}
+          {results.map((result, i) => {
+            const isFocused = focusedPaths.has(result.path);
             return (
               <button
-                key={project.id}
-                onClick={() => selectProject(project)}
+                key={result.path}
+                onClick={() => selectResult(result)}
                 style={{
                   ...styles.row,
                   ...(i === selectedIndex ? styles.rowSelected : {}),
                 }}
               >
                 <div style={styles.rowMain}>
-                  <span style={styles.name}>{project.name}</span>
-                  <span style={styles.path}>{project.path}</span>
+                  <span style={styles.name}>{result.name}</span>
+                  <span style={styles.path}>{result.path}</span>
                 </div>
                 <span style={isFocused ? styles.checkBadge : styles.addBadge}>
                   {isFocused ? "✓" : "Add"}
@@ -122,7 +114,7 @@ export default function ProjectSearch({ onClose }: ProjectSearchProps) {
         </div>
         <div style={styles.footer}>
           <kbd style={styles.kbd}>↑↓</kbd> navigate
-          <kbd style={styles.kbd}>↵</kbd> select
+          <kbd style={styles.kbd}>↵</kbd> add to focus
           <kbd style={styles.kbd}>esc</kbd> close
         </div>
       </div>
