@@ -39,9 +39,10 @@ type Server struct {
 	wsMu    sync.Mutex
 	clients []*wsClient
 
-	cfgMu    sync.Mutex
-	sessions *agent.SessionManager
-	cfg      *config.Config
+	cfgMu          sync.Mutex
+	sessions       *agent.SessionManager
+	cfg            *config.Config
+	onConfigChange func()
 }
 
 var upgrader = websocket.Upgrader{
@@ -86,6 +87,10 @@ func WithSessionManager(sm *agent.SessionManager) Option {
 
 func WithConfig(cfg *config.Config) Option {
 	return func(s *Server) { s.cfg = cfg }
+}
+
+func WithOnConfigChange(fn func()) Option {
+	return func(s *Server) { s.onConfigChange = fn }
 }
 
 func isLocalOrigin(origin string) bool {
@@ -483,6 +488,9 @@ func (s *Server) saveAndBroadcastConfig(c *wsClient) {
 		return
 	}
 	s.broadcastConfigUpdate()
+	if s.onConfigChange != nil {
+		go s.onConfigChange()
+	}
 }
 
 func (s *Server) broadcastConfigUpdate() {
