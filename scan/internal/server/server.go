@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cjwinslow/bridge/scan/internal/agent"
+	"github.com/cjwinslow/bridge/scan/internal/config"
 	"github.com/cjwinslow/bridge/scan/internal/spec"
 	"github.com/gorilla/websocket"
 )
@@ -39,6 +40,7 @@ type Server struct {
 	clients []*wsClient
 
 	sessions *agent.SessionManager
+	cfg      *config.Config
 }
 
 var upgrader = websocket.Upgrader{
@@ -79,6 +81,10 @@ func WithWebDir(dir string) Option {
 
 func WithSessionManager(sm *agent.SessionManager) Option {
 	return func(s *Server) { s.sessions = sm }
+}
+
+func WithConfig(cfg *config.Config) Option {
+	return func(s *Server) { s.cfg = cfg }
 }
 
 func isLocalOrigin(origin string) bool {
@@ -187,6 +193,15 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if s.cfg != nil {
+		if msg := marshalConfigUpdate(s.cfg); msg != nil {
+			select {
+			case client.send <- msg:
+			default:
+			}
+		}
+	}
+
 	go s.wsWritePump(client)
 	s.wsReadPump(client)
 }
@@ -260,6 +275,14 @@ func (s *Server) handleWSMessage(c *wsClient, raw []byte) {
 		s.handlePiCommand(c, raw)
 	case "extension_ui_response":
 		s.handleExtensionUIResponse(c, raw)
+	case "project_opt_in":
+		s.handleProjectOptIn(c, raw)
+	case "project_opt_out":
+		s.handleProjectOptOut(c, raw)
+	case "project_pin":
+		s.handleProjectPin(c, raw)
+	case "project_unpin":
+		s.handleProjectUnpin(c, raw)
 	default:
 		log.Printf("ws: unknown message type: %q", env.Type)
 	}
@@ -383,6 +406,108 @@ func (s *Server) handleExtensionUIResponse(c *wsClient, raw []byte) {
 	}
 
 	s.sessions.Send(req.SessionID, req.Response)
+}
+
+type projectIDMsg struct {
+	ProjectID string `json:"projectId"`
+}
+
+func (s *Server) handleProjectOptIn(c *wsClient, raw []byte) {
+	var req projectIDMsg
+	if err := json.Unmarshal(raw, &req); err != nil || req.ProjectID == "" {
+		sendToClient(c, map[string]string{"type": "error", "error": "invalid project_opt_in"})
+		return
+	}
+	if s.cfg == nil {
+		sendToClient(c, map[string]string{"type": "error", "error": "config not available"})
+		return
+	}
+	s.cfg.AddFocusedProject(req.ProjectID)
+	s.saveAndBroadcastConfig(c)
+}
+
+func (s *Server) handleProjectOptOut(c *wsClient, raw []byte) {
+	var req projectIDMsg
+	if err := json.Unmarshal(raw, &req); err != nil || req.ProjectID == "" {
+		sendToClient(c, map[string]string{"type": "error", "error": "invalid project_opt_out"})
+		return
+	}
+	if s.cfg == nil {
+		sendToClient(c, map[string]string{"type": "error", "error": "config not available"})
+		return
+	}
+	s.cfg.RemoveFocusedProject(req.ProjectID)
+	s.saveAndBroadcastConfig(c)
+}
+
+func (s *Server) handleProjectPin(c *wsClient, raw []byte) {
+	var req projectIDMsg
+	if err := json.Unmarshal(raw, &req); err != nil || req.ProjectID == "" {
+		sendToClient(c, map[string]string{"type": "error", "error": "invalid project_pin"})
+		return
+	}
+	if s.cfg == nil {
+		sendToClient(c, map[string]string{"type": "error", "error": "config not available"})
+		return
+	}
+	s.cfg.AddPinnedProject(req.ProjectID)
+	s.saveAndBroadcastConfig(c)
+}
+
+func (s *Server) handleProjectUnpin(c *wsClient, raw []byte) {
+	var req projectIDMsg
+	if err := json.Unmarshal(raw, &req); err != nil || req.ProjectID == "" {
+		sendToClient(c, map[string]string{"type": "error", "error": "invalid project_unpin"})
+		return
+	}
+	if s.cfg == nil {
+		sendToClient(c, map[string]string{"type": "error", "error": "config not available"})
+		return
+	}
+	s.cfg.RemovePinnedProject(req.ProjectID)
+	s.saveAndBroadcastConfig(c)
+}
+
+func (s *Server) saveAndBroadcastConfig(c *wsClient) {
+	if err := s.cfg.Save(); err != nil {
+		sendToClient(c, map[string]interface{}{"type": "error", "error": fmt.Sprintf("save config: %v", err)})
+		return
+	}
+	s.broadcastConfigUpdate()
+}
+
+func (s *Server) broadcastConfigUpdate() {
+	msg := marshalConfigUpdate(s.cfg)
+	if msg == nil {
+		return
+	}
+
+	s.wsMu.Lock()
+	defer s.wsMu.Unlock()
+
+	live := s.clients[:0]
+	for _, c := range s.clients {
+		select {
+		case c.send <- msg:
+			live = append(live, c)
+		default:
+			c.conn.Close()
+		}
+	}
+	s.clients = live
+}
+
+func marshalConfigUpdate(cfg *config.Config) []byte {
+	data, err := json.Marshal(map[string]interface{}{
+		"type":            "config_update",
+		"focusedProjects": cfg.FocusedProjects,
+		"pinnedProjects":  cfg.PinnedProjects,
+	})
+	if err != nil {
+		log.Printf("ws: marshal config_update error: %v", err)
+		return nil
+	}
+	return data
 }
 
 func (s *Server) Broadcast(msg []byte) {

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cjwinslow/bridge/scan/internal/config"
 	"github.com/cjwinslow/bridge/scan/internal/spec"
 	"github.com/gorilla/websocket"
 )
@@ -495,5 +496,162 @@ func TestWSInvalidJSON(t *testing.T) {
 
 	if msg["type"] != "error" {
 		t.Errorf("type = %v, want error", msg["type"])
+	}
+}
+
+func testConfigServer(t *testing.T) (*Server, *config.Config) {
+	t.Helper()
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	cfg := config.NewDefault([]string{"/code"})
+	cfg.Save()
+	srv := New(0, WithConfig(cfg))
+	srv.SetSpec(testSpec())
+	return srv, cfg
+}
+
+func TestWSConfigUpdateOnConnect(t *testing.T) {
+	srv, cfg := testConfigServer(t)
+	cfg.AddFocusedProject("project:a")
+	cfg.AddPinnedProject("project:a")
+
+	conn := wsConnect(t, srv)
+
+	readWSMsg(t, conn)
+	msg := readWSMsg(t, conn)
+
+	if msg["type"] != "config_update" {
+		t.Fatalf("type = %v, want config_update", msg["type"])
+	}
+	focused := msg["focusedProjects"].([]interface{})
+	if len(focused) != 1 || focused[0] != "project:a" {
+		t.Errorf("focusedProjects = %v", focused)
+	}
+	pinned := msg["pinnedProjects"].([]interface{})
+	if len(pinned) != 1 || pinned[0] != "project:a" {
+		t.Errorf("pinnedProjects = %v", pinned)
+	}
+}
+
+func TestWSProjectOptIn(t *testing.T) {
+	srv, cfg := testConfigServer(t)
+	conn := wsConnect(t, srv)
+
+	readWSMsg(t, conn)
+	readWSMsg(t, conn)
+
+	sendWSMsg(t, conn, map[string]string{"type": "project_opt_in", "projectId": "project:code/test"})
+	msg := readWSMsg(t, conn)
+
+	if msg["type"] != "config_update" {
+		t.Fatalf("type = %v, want config_update", msg["type"])
+	}
+	focused := msg["focusedProjects"].([]interface{})
+	if len(focused) != 1 || focused[0] != "project:code/test" {
+		t.Errorf("focusedProjects = %v", focused)
+	}
+	if !cfg.HasFocusedProject("project:code/test") {
+		t.Error("config not updated")
+	}
+}
+
+func TestWSProjectOptOut(t *testing.T) {
+	srv, cfg := testConfigServer(t)
+	cfg.AddFocusedProject("project:code/test")
+	cfg.AddPinnedProject("project:code/test")
+
+	conn := wsConnect(t, srv)
+	readWSMsg(t, conn)
+	readWSMsg(t, conn)
+
+	sendWSMsg(t, conn, map[string]string{"type": "project_opt_out", "projectId": "project:code/test"})
+	msg := readWSMsg(t, conn)
+
+	if msg["type"] != "config_update" {
+		t.Fatalf("type = %v, want config_update", msg["type"])
+	}
+	focused := msg["focusedProjects"].([]interface{})
+	if len(focused) != 0 {
+		t.Errorf("focusedProjects = %v, want empty", focused)
+	}
+	pinned := msg["pinnedProjects"].([]interface{})
+	if len(pinned) != 0 {
+		t.Errorf("pinnedProjects = %v, want empty (cascade)", pinned)
+	}
+}
+
+func TestWSProjectPin(t *testing.T) {
+	srv, _ := testConfigServer(t)
+	conn := wsConnect(t, srv)
+	readWSMsg(t, conn)
+	readWSMsg(t, conn)
+
+	sendWSMsg(t, conn, map[string]string{"type": "project_pin", "projectId": "project:a"})
+	msg := readWSMsg(t, conn)
+
+	if msg["type"] != "config_update" {
+		t.Fatalf("type = %v, want config_update", msg["type"])
+	}
+	pinned := msg["pinnedProjects"].([]interface{})
+	if len(pinned) != 1 || pinned[0] != "project:a" {
+		t.Errorf("pinnedProjects = %v", pinned)
+	}
+}
+
+func TestWSProjectUnpin(t *testing.T) {
+	srv, cfg := testConfigServer(t)
+	cfg.AddPinnedProject("project:a")
+
+	conn := wsConnect(t, srv)
+	readWSMsg(t, conn)
+	readWSMsg(t, conn)
+
+	sendWSMsg(t, conn, map[string]string{"type": "project_unpin", "projectId": "project:a"})
+	msg := readWSMsg(t, conn)
+
+	if msg["type"] != "config_update" {
+		t.Fatalf("type = %v, want config_update", msg["type"])
+	}
+	pinned := msg["pinnedProjects"].([]interface{})
+	if len(pinned) != 0 {
+		t.Errorf("pinnedProjects = %v, want empty", pinned)
+	}
+}
+
+func TestWSProjectOptInNoConfig(t *testing.T) {
+	srv := New(0)
+	srv.SetSpec(testSpec())
+	conn := wsConnect(t, srv)
+	readWSMsg(t, conn)
+
+	sendWSMsg(t, conn, map[string]string{"type": "project_opt_in", "projectId": "project:a"})
+	msg := readWSMsg(t, conn)
+
+	if msg["type"] != "error" {
+		t.Errorf("type = %v, want error", msg["type"])
+	}
+}
+
+func TestWSProjectOptInBroadcastToAll(t *testing.T) {
+	srv, _ := testConfigServer(t)
+
+	conn1 := wsConnect(t, srv)
+	readWSMsg(t, conn1)
+	readWSMsg(t, conn1)
+
+	conn2 := wsConnect(t, srv)
+	readWSMsg(t, conn2)
+	readWSMsg(t, conn2)
+
+	sendWSMsg(t, conn1, map[string]string{"type": "project_opt_in", "projectId": "project:x"})
+
+	msg1 := readWSMsg(t, conn1)
+	if msg1["type"] != "config_update" {
+		t.Errorf("conn1 type = %v, want config_update", msg1["type"])
+	}
+
+	msg2 := readWSMsg(t, conn2)
+	if msg2["type"] != "config_update" {
+		t.Errorf("conn2 type = %v, want config_update", msg2["type"])
 	}
 }
