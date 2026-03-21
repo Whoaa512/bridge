@@ -144,7 +144,12 @@ const ws = connectWS({
     useBridgeStore.getState().setWsConnected(true);
   },
   onSessionCreated: (session) => {
-    useBridgeStore.getState().addSession(session);
+    const store = useBridgeStore.getState();
+    store.addSession(session);
+    store.setActiveSessionId(session.id);
+    if (session.projectId && !store.expandedProjects.has(session.projectId)) {
+      store.toggleProjectExpanded(session.projectId);
+    }
   },
   onSessionDestroyed: (sessionId) => {
     useBridgeStore.getState().removeSession(sessionId);
