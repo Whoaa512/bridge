@@ -13,13 +13,15 @@ interface Props {
 
 const pulseAnimation = "bridge-pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.3 } }";
 const progressAnimation = "bridge-progress { 0% { transform: translateX(-100%) } 100% { transform: translateX(100%) } }";
+const EMPTY_MESSAGES: never[] = [];
 
 export default function ChatArea({ session, projectName }: Props) {
-  const messages = useBridgeStore((s) => s.messages.get(session.id) ?? []);
+  const messages = useBridgeStore((s) => s.messages.get(session.id) ?? EMPTY_MESSAGES);
   const sessionError = useBridgeStore((s) => s.sessionErrors.get(session.id));
   const topic = useBridgeStore((s) => s.sessionTopics.get(session.id));
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [isNearBottom, setIsNearBottom] = useState(true);
+  const isNearBottomRef = useRef(true);
+  const [showPill, setShowPill] = useState(false);
   const [hasNewBelow, setHasNewBelow] = useState(false);
   const prevCountRef = useRef(messages.length);
 
@@ -27,7 +29,8 @@ export default function ChatArea({ session, projectName }: Props) {
     const el = scrollRef.current;
     if (!el) return;
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-    setIsNearBottom(nearBottom);
+    isNearBottomRef.current = nearBottom;
+    setShowPill(!nearBottom);
     if (nearBottom) setHasNewBelow(false);
   }, []);
 
@@ -35,18 +38,16 @@ export default function ChatArea({ session, projectName }: Props) {
     const grew = messages.length > prevCountRef.current;
     prevCountRef.current = messages.length;
 
-    const el = scrollRef.current;
-    if (!el) return;
-
-    if (!isNearBottom && grew) {
+    if (!isNearBottomRef.current && grew) {
       setHasNewBelow(true);
       return;
     }
 
-    if (isNearBottom) {
-      el.scrollTop = el.scrollHeight;
+    if (isNearBottomRef.current) {
+      const el = scrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
     }
-  }, [messages, isNearBottom]);
+  }, [messages]);
 
   const scrollToBottom = useCallback(() => {
     const el = scrollRef.current;
@@ -129,7 +130,7 @@ export default function ChatArea({ session, projectName }: Props) {
             })
           )}
         </div>
-        {!isNearBottom && (
+        {showPill && (
           <div style={styles.pill} onClick={scrollToBottom}>
             {hasNewBelow ? "↓ New messages" : "↓"}
           </div>
