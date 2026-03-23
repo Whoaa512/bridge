@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { useBridgeStore } from "../../store";
 import type { SessionInfo } from "../../agent/ws-types";
 import MessageBubble from "./MessageBubble";
@@ -12,19 +12,41 @@ interface Props {
 export default function ChatArea({ session }: Props) {
   const messages = useBridgeStore((s) => s.messages.get(session.id) ?? []);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const isNearBottom = useRef(true);
+  const [isNearBottom, setIsNearBottom] = useState(true);
+  const [hasNewBelow, setHasNewBelow] = useState(false);
+  const prevCountRef = useRef(messages.length);
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    isNearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    setIsNearBottom(nearBottom);
+    if (nearBottom) setHasNewBelow(false);
   }, []);
 
   useEffect(() => {
+    const grew = messages.length > prevCountRef.current;
+    prevCountRef.current = messages.length;
+
     const el = scrollRef.current;
-    if (!el || !isNearBottom.current) return;
-    el.scrollTop = el.scrollHeight;
-  }, [messages]);
+    if (!el) return;
+
+    if (!isNearBottom && grew) {
+      setHasNewBelow(true);
+      return;
+    }
+
+    if (isNearBottom) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [messages, isNearBottom]);
+
+  const scrollToBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    setHasNewBelow(false);
+  }, []);
 
   return (
     <div style={styles.container}>
@@ -37,31 +59,38 @@ export default function ChatArea({ session }: Props) {
           {session.state}
         </span>
       </div>
-      <div ref={scrollRef} style={styles.messages} onScroll={handleScroll}>
-        {messages.length === 0 ? (
-          <div style={styles.empty}>Send a message to start.</div>
-        ) : (
-          messages.map((msg, i) => {
-            const prev = i > 0 ? messages[i - 1] : null;
-            const showDivider = prev
-              && prev.role === "assistant"
-              && prev.completedAt
-              && msg.role === "user";
-            const elapsed = showDivider
-              ? msg.timestamp - prev!.completedAt!
-              : 0;
-            return (
-              <div key={msg.id}>
-                {showDivider && (
-                  <div style={styles.divider}>
-                    <div style={styles.dividerLine} />
-                    <span style={styles.dividerBadge}>{formatDuration(elapsed)}</span>
-                  </div>
-                )}
-                <MessageBubble message={msg} />
-              </div>
-            );
-          })
+      <div style={styles.messagesWrapper}>
+        <div ref={scrollRef} style={styles.messages} onScroll={handleScroll}>
+          {messages.length === 0 ? (
+            <div style={styles.empty}>Send a message to start.</div>
+          ) : (
+            messages.map((msg, i) => {
+              const prev = i > 0 ? messages[i - 1] : null;
+              const showDivider = prev
+                && prev.role === "assistant"
+                && prev.completedAt
+                && msg.role === "user";
+              const elapsed = showDivider
+                ? msg.timestamp - prev!.completedAt!
+                : 0;
+              return (
+                <div key={msg.id}>
+                  {showDivider && (
+                    <div style={styles.divider}>
+                      <div style={styles.dividerLine} />
+                      <span style={styles.dividerBadge}>{formatDuration(elapsed)}</span>
+                    </div>
+                  )}
+                  <MessageBubble message={msg} />
+                </div>
+              );
+            })
+          )}
+        </div>
+        {!isNearBottom && (
+          <div style={styles.pill} onClick={scrollToBottom}>
+            {hasNewBelow ? "↓ New messages" : "↓"}
+          </div>
         )}
       </div>
     </div>
@@ -91,10 +120,31 @@ const styles = {
   badge: {
     fontWeight: 500,
   },
-  messages: {
+  messagesWrapper: {
+    position: "relative" as const,
     flex: 1,
+    minHeight: 0,
+  },
+  messages: {
+    height: "100%",
     overflowY: "auto" as const,
     padding: `${spacing.md}px 0`,
+  },
+  pill: {
+    position: "absolute" as const,
+    bottom: spacing.lg,
+    left: "50%",
+    transform: "translateX(-50%)",
+    padding: `${spacing.xs}px ${spacing.md}px`,
+    background: colors.accent,
+    color: "#fff",
+    fontSize: font.sizeSm,
+    borderRadius: radius.xl,
+    cursor: "pointer",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
+    whiteSpace: "nowrap" as const,
+    userSelect: "none" as const,
+    zIndex: 1,
   },
   empty: {
     display: "flex",
