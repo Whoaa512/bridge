@@ -75,6 +75,14 @@ function getLastAssistantMessageId(sessionId: string): string | null {
 }
 
 function handlePiEvent(sessionId: string, event: AgentEvent) {
+  try {
+    handlePiEventInner(sessionId, event);
+  } catch (err) {
+    console.warn("handlePiEvent error:", err, event);
+  }
+}
+
+function handlePiEventInner(sessionId: string, event: AgentEvent) {
   const store = useBridgeStore.getState();
 
   const newState = sessionStateFromEvent(event);
@@ -98,7 +106,7 @@ function handlePiEvent(sessionId: string, event: AgentEvent) {
 
     case "message_update": {
       const ame = event.assistantMessageEvent;
-      if (ame.type === "text_delta") {
+      if (ame?.type === "text_delta") {
         store.updateLastMessage(sessionId, (msg) => ({
           ...msg,
           content: msg.content + ame.delta,

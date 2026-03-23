@@ -5,6 +5,7 @@ import SessionSidebar from "./sessions/SessionSidebar";
 import ChatArea from "./sessions/ChatArea";
 import Composer from "./sessions/Composer";
 import ExtensionDialog from "./sessions/ExtensionDialog";
+import ErrorBoundary from "../ui/ErrorBoundary";
 
 function EmptyState() {
   return (
@@ -67,10 +68,10 @@ export default function SessionsView() {
         {!activeSession ? (
           <EmptyState />
         ) : (
-          <>
+          <ErrorBoundary>
             <ChatArea session={activeSession} />
             <Composer />
-          </>
+          </ErrorBoundary>
         )}
       </div>
       <ExtensionDialog />
