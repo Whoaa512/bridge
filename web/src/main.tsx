@@ -164,6 +164,9 @@ const ws = connectWS({
   },
   onPiEvent: handlePiEvent,
   onExtensionUIRequest: (sessionId, request) => {
+    const interactive = request.method === "select" || request.method === "confirm"
+      || request.method === "input" || request.method === "notify";
+    if (!interactive) return;
     useBridgeStore.getState().setExtensionUIRequest({ sessionId, request });
   },
   onConfigUpdate: (focusedProjects, pinnedProjects) => {

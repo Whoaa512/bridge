@@ -142,3 +142,25 @@ func TestExtensionUIRequestUnmarshal(t *testing.T) {
 		t.Errorf("method = %q", req.Method)
 	}
 }
+
+func TestIsInteractiveUIRequest(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{`{"method":"select","title":"Pick one"}`, true},
+		{`{"method":"confirm","title":"Sure?"}`, true},
+		{`{"method":"input","title":"Enter value"}`, true},
+		{`{"method":"notify","message":"Done"}`, true},
+		{`{"method":"setTitle","title":"⠋ spinning"}`, false},
+		{`{"method":"setStatus","statusKey":"elapsed"}`, false},
+		{`{"method":"setWidget","widgetKey":"todos"}`, false},
+		{`not json`, false},
+	}
+	for _, tt := range tests {
+		got := IsInteractiveUIRequest(json.RawMessage(tt.input))
+		if got != tt.want {
+			t.Errorf("IsInteractiveUIRequest(%q) = %v, want %v", tt.input, got, tt.want)
+		}
+	}
+}

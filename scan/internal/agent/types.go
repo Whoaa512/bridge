@@ -130,3 +130,18 @@ func ClassifyOutput(data json.RawMessage) string {
 		return "event"
 	}
 }
+
+func IsInteractiveUIRequest(data json.RawMessage) bool {
+	var obj struct {
+		Method string `json:"method"`
+	}
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return false
+	}
+	switch obj.Method {
+	case "select", "confirm", "input", "notify":
+		return true
+	default:
+		return false
+	}
+}

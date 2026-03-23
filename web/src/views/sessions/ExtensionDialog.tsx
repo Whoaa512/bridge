@@ -11,6 +11,10 @@ export default function ExtensionDialog() {
 
   const { sessionId, request } = pending;
 
+  const interactive = request.method === "select" || request.method === "confirm"
+    || request.method === "input" || request.method === "notify";
+  if (!interactive) return null;
+
   function respond(value: unknown) {
     sendExtensionUIResponse(sessionId, {
       type: "extension_ui_response",

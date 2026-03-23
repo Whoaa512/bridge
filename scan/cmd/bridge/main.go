@@ -230,6 +230,9 @@ func runServe() {
 				"response":  json.RawMessage(data),
 			})
 		case "extension_ui_request":
+			if !agent.IsInteractiveUIRequest(data) {
+				return
+			}
 			wrapped, merr = json.Marshal(map[string]interface{}{
 				"type":      "extension_ui_request",
 				"sessionId": sessionID,
