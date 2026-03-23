@@ -31,7 +31,7 @@ export default function SessionsView() {
   const spec = useBridgeStore((s) => s.spec);
 
   const projectName = activeSession?.projectId && spec
-    ? spec.projects.find((p) => p.path === activeSession.projectId)?.name
+    ? spec.projects.find((p) => p.id === activeSession.projectId)?.name
     : undefined;
 
   useEffect(() => {
@@ -69,7 +69,8 @@ export default function SessionsView() {
       const all = store.spec?.projects ?? [];
       const focused = all.filter((p) => store.focusedPaths.has(p.path));
       if (focused.length === 0) return;
-      const project = focused[0];
+      const activeSess = store.activeSessionId ? store.sessions.get(store.activeSessionId) : null;
+      const project = (activeSess?.projectId && focused.find((p) => p.id === activeSess.projectId)) || focused[0];
       if (!store.expandedProjects.has(project.id)) {
         store.toggleProjectExpanded(project.id);
       }
@@ -92,9 +93,10 @@ export default function SessionsView() {
     }
 
     if (mod && e.key === "w") {
-      e.preventDefault();
       const sid = useBridgeStore.getState().activeSessionId;
-      if (sid) sendSessionDestroy(sid);
+      if (!sid) return;
+      e.preventDefault();
+      sendSessionDestroy(sid);
       return;
     }
 
