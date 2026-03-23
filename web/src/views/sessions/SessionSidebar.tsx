@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import { useBridgeStore } from "../../store";
 import type { SessionInfo, HistoricalSession } from "../../agent/ws-types";
 import type { Project } from "../../core/types";
-import { sendSessionCreate, sendProjectPin, sendProjectUnpin, sendProjectOptOut, sendSessionHistory, sendSessionResume } from "../../agent/commands";
+import { sendSessionCreate, sendProjectPin, sendProjectUnpin, sendProjectOptOut, sendSessionHistory, sendSessionResume, sendSessionDestroy } from "../../agent/commands";
 import ContextMenu from "../../ui/ContextMenu";
 import type { ContextMenuItem } from "../../ui/ContextMenu";
 import { relativeTime } from "../../ui/time";
@@ -16,18 +16,40 @@ const STATE_COLORS: Record<string, string> = {
   compacting: colors.warning,
 };
 
-function SessionRow({ session, isActive, onClick }: {
+function SessionRow({ session, isActive, onClick, onContextMenu }: {
   session: SessionInfo;
   isActive: boolean;
   onClick: () => void;
+  onContextMenu: (e: React.MouseEvent) => void;
 }) {
+  const topic = useBridgeStore((s) => s.sessionTopics.get(session.id));
+  const messages = useBridgeStore((s) => s.messages.get(session.id));
+
+  const lastTime = useMemo(() => {
+    if (!messages || messages.length === 0) return null;
+    const ts = messages[messages.length - 1].timestamp;
+    return relativeTime(new Date(ts).toISOString(), "terse");
+  }, [messages]);
+
   return (
-    <button onClick={onClick} style={{ ...styles.sessionRow, ...(isActive ? styles.sessionActive : {}) }}>
-      <div style={styles.sessionTitle}>
-        {session.model}
-        <span style={{ ...styles.stateDot, background: STATE_COLORS[session.state] ?? colors.textMuted }} />
+    <button
+      onClick={onClick}
+      onContextMenu={onContextMenu}
+      style={{
+        ...styles.sessionRow,
+        ...(isActive ? styles.sessionActive : {}),
+      }}
+    >
+      <div style={styles.sessionContent}>
+        <div style={styles.sessionTopLine}>
+          <span style={styles.sessionTopic}>{topic || "New session"}</span>
+          <span style={{ ...styles.stateDot, background: STATE_COLORS[session.state] ?? colors.textMuted }} />
+        </div>
+        <div style={styles.sessionBottomLine}>
+          <span style={styles.sessionModel}>{session.model}</span>
+          {lastTime && <span style={styles.sessionTime}>{lastTime}</span>}
+        </div>
       </div>
-      <div style={styles.sessionMeta}>{session.state}</div>
     </button>
   );
 }
@@ -42,7 +64,7 @@ function HistoryRow({ session, onResume }: { session: HistoricalSession; onResum
   );
 }
 
-function ProjectGroup({ project, sessions, activeSessionId, onSelect, onNew, pinned, onPin, onContextMenu }: {
+function ProjectGroup({ project, sessions, activeSessionId, onSelect, onNew, pinned, onPin, onContextMenu, onSessionContextMenu }: {
   project: Project;
   sessions: SessionInfo[];
   activeSessionId: string | null;
@@ -51,6 +73,7 @@ function ProjectGroup({ project, sessions, activeSessionId, onSelect, onNew, pin
   pinned: boolean;
   onPin: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
+  onSessionContextMenu: (e: React.MouseEvent, sessionId: string) => void;
 }) {
   const expanded = useBridgeStore((s) => s.expandedProjects.has(project.id));
   const toggle = useBridgeStore((s) => s.toggleProjectExpanded);
@@ -111,6 +134,7 @@ function ProjectGroup({ project, sessions, activeSessionId, onSelect, onNew, pin
                   session={s}
                   isActive={s.id === activeSessionId}
                   onClick={() => onSelect(s.id)}
+                  onContextMenu={(e) => onSessionContextMenu(e, s.id)}
                 />
               ))}
               {history && history.length > 0 && (
@@ -142,6 +166,8 @@ export default function SessionSidebar() {
   const pinnedPaths = useBridgeStore((s) => s.pinnedPaths);
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; projectId: string } | null>(null);
+  const [sessionContextMenu, setSessionContextMenu] = useState<{ x: number; y: number; sessionId: string } | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   const sortedEntries = useMemo(() => {
     const all = spec?.projects ?? [];
@@ -196,6 +222,32 @@ export default function SessionSidebar() {
   function handleContextMenu(e: React.MouseEvent, projectPath: string) {
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, projectId: projectPath });
+    setSessionContextMenu(null);
+  }
+
+  function handleSessionContextMenu(e: React.MouseEvent, sessionId: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    setSessionContextMenu({ x: e.clientX, y: e.clientY, sessionId });
+    setContextMenu(null);
+  }
+
+  function buildSessionContextMenuItems(sessionId: string): ContextMenuItem[] {
+    return [
+      {
+        label: "Clear messages",
+        onClick: () => useBridgeStore.getState().clearMessages(sessionId),
+      },
+      {
+        label: "Destroy session",
+        danger: true,
+        onClick: () => sendSessionDestroy(sessionId),
+      },
+      {
+        label: "Copy session ID",
+        onClick: () => navigator.clipboard.writeText(sessionId),
+      },
+    ];
   }
 
   function buildContextMenuItems(projectPath: string): ContextMenuItem[] {
@@ -224,13 +276,29 @@ export default function SessionSidebar() {
     useBridgeStore.getState().setShowProjectSearch(true);
   }
 
+  const MAX_VISIBLE = 8;
+  const canCollapse = sortedEntries.length > MAX_VISIBLE;
+  const visibleEntries = useMemo(() => {
+    if (!canCollapse || showAll) return sortedEntries;
+    const pinned: typeof sortedEntries = [];
+    const rest: typeof sortedEntries = [];
+    for (const e of sortedEntries) {
+      if (e.pinned) pinned.push(e);
+      else rest.push(e);
+    }
+    const remaining = MAX_VISIBLE - pinned.length;
+    return [...pinned, ...rest.slice(0, Math.max(0, remaining))];
+  }, [sortedEntries, showAll, canCollapse]);
+
+  const hiddenCount = sortedEntries.length - visibleEntries.length;
+
   return (
     <div style={styles.sidebar}>
       <div style={styles.header}>
         <span style={styles.headerLabel}>Projects ({sortedEntries.length})</span>
       </div>
       <div style={styles.list}>
-        {sortedEntries.map((entry, i) => (
+        {visibleEntries.map((entry, i) => (
           <div key={entry.project.id}>
             {hasDivider && i === pinnedCount && <div style={styles.divider} />}
             <ProjectGroup
@@ -242,9 +310,15 @@ export default function SessionSidebar() {
               pinned={entry.pinned}
               onPin={() => handlePin(entry.project.path)}
               onContextMenu={(e) => handleContextMenu(e, entry.project.path)}
+              onSessionContextMenu={handleSessionContextMenu}
             />
           </div>
         ))}
+        {canCollapse && (
+          <button onClick={() => setShowAll(!showAll)} style={styles.showMoreBtn}>
+            {showAll ? "Show less" : `Show ${hiddenCount} more`}
+          </button>
+        )}
       </div>
       <button onClick={handleAddProject} style={styles.addProjectBtn}>
         <span style={styles.addProjectKbd}>⌘K</span> Add project
@@ -255,6 +329,14 @@ export default function SessionSidebar() {
           y={contextMenu.y}
           items={buildContextMenuItems(contextMenu.projectId)}
           onClose={() => setContextMenu(null)}
+        />
+      )}
+      {sessionContextMenu && (
+        <ContextMenu
+          x={sessionContextMenu.x}
+          y={sessionContextMenu.y}
+          items={buildSessionContextMenuItems(sessionContextMenu.sessionId)}
+          onClose={() => setSessionContextMenu(null)}
         />
       )}
     </div>
@@ -382,10 +464,10 @@ const styles: Record<string, React.CSSProperties> = {
   sessionRow: {
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between",
     width: "100%",
-    padding: `5px ${spacing.sm}px`,
+    padding: `4px ${spacing.sm}px`,
     border: "none",
+    borderLeft: "2px solid transparent",
     borderRadius: radius.sm,
     background: "transparent",
     color: colors.text,
@@ -397,27 +479,48 @@ const styles: Record<string, React.CSSProperties> = {
   },
   sessionActive: {
     background: colors.bgOverlay,
+    borderLeftColor: colors.accent,
   },
-  sessionTitle: {
+  sessionContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+  sessionTopLine: {
     display: "flex",
     alignItems: "center",
     gap: 6,
+  },
+  sessionTopic: {
+    flex: 1,
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
-    flex: 1,
+    fontSize: font.sizeMd,
+  },
+  sessionBottomLine: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+    marginTop: 1,
+  },
+  sessionModel: {
+    fontSize: font.sizeXs,
+    color: colors.textMuted,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  sessionTime: {
+    fontSize: font.sizeXs,
+    color: colors.textFaint,
+    flexShrink: 0,
   },
   stateDot: {
     width: 6,
     height: 6,
     borderRadius: "50%",
     flexShrink: 0,
-  },
-  sessionMeta: {
-    fontSize: font.sizeXs,
-    color: colors.textMuted,
-    flexShrink: 0,
-    marginLeft: spacing.sm,
   },
   noSessions: {
     padding: `${spacing.xs}px ${spacing.sm}px`,
@@ -489,5 +592,18 @@ const styles: Record<string, React.CSSProperties> = {
     background: colors.bgOverlay,
     border: `1px solid ${colors.border}`,
     color: colors.textMuted,
+  },
+  showMoreBtn: {
+    display: "block",
+    width: "100%",
+    padding: `${spacing.xs}px ${spacing.sm}px`,
+    border: "none",
+    background: "transparent",
+    color: colors.textLink,
+    fontSize: font.sizeSm,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    textAlign: "left",
+    borderRadius: radius.sm,
   },
 };

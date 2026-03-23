@@ -71,6 +71,10 @@ export interface BridgeStore {
 
   sessionErrors: Map<string, string>;
   setSessionError: (sessionId: string, error: string | null) => void;
+
+  sessionTopics: Map<string, string>;
+  setSessionTopic: (sessionId: string, topic: string) => void;
+  getAdjacentSessionId: (direction: "prev" | "next") => string | null;
 }
 
 export const useBridgeStore = create<BridgeStore>((set, get) => ({
@@ -91,8 +95,10 @@ export const useBridgeStore = create<BridgeStore>((set, get) => ({
     next.delete(id);
     const msgs = new Map(get().messages);
     msgs.delete(id);
+    const topics = new Map(get().sessionTopics);
+    topics.delete(id);
     const activeSessionId = get().activeSessionId === id ? null : get().activeSessionId;
-    set({ sessions: next, messages: msgs, activeSessionId });
+    set({ sessions: next, messages: msgs, sessionTopics: topics, activeSessionId });
   },
   updateSessionState: (id, state) => {
     const sessions = get().sessions;
@@ -118,6 +124,16 @@ export const useBridgeStore = create<BridgeStore>((set, get) => ({
     const list = [...(msgs.get(sessionId) ?? []), message];
     msgs.set(sessionId, list);
     set({ messages: msgs });
+
+    if (message.role === "user" && !get().sessionTopics.has(sessionId)) {
+      const firstLine = message.content.split("\n")[0].trim();
+      const topic = firstLine.length > 40 ? firstLine.slice(0, 40) + "…" : firstLine;
+      if (topic) {
+        const topics = new Map(get().sessionTopics);
+        topics.set(sessionId, topic);
+        set({ sessionTopics: topics });
+      }
+    }
   },
   updateLastMessage: (sessionId, updater) => {
     const msgs = new Map(get().messages);
@@ -222,5 +238,23 @@ export const useBridgeStore = create<BridgeStore>((set, get) => ({
       next.set(sessionId, error);
     }
     set({ sessionErrors: next });
+  },
+
+  sessionTopics: new Map(),
+  setSessionTopic: (sessionId, topic) => {
+    const next = new Map(get().sessionTopics);
+    next.set(sessionId, topic);
+    set({ sessionTopics: next });
+  },
+  getAdjacentSessionId: (direction) => {
+    const { sessions, activeSessionId } = get();
+    const ids = [...sessions.keys()];
+    if (ids.length === 0) return null;
+    if (!activeSessionId) return ids[0];
+    const idx = ids.indexOf(activeSessionId);
+    if (idx === -1) return ids[0];
+    const next = direction === "next" ? idx + 1 : idx - 1;
+    if (next < 0 || next >= ids.length) return null;
+    return ids[next];
   },
 }));

@@ -83,6 +83,7 @@ export default function Composer() {
       <div style={styles.row}>
         <textarea
           ref={textareaRef}
+          id="composer-textarea"
           value={text}
           onChange={handleInput}
           onKeyDown={handleKeyDown}

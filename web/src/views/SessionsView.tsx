@@ -1,6 +1,6 @@
 import { useEffect, useCallback } from "react";
 import { useBridgeStore } from "../store";
-import { sendCommand } from "../agent/commands";
+import { sendCommand, sendSessionCreate, sendSessionDestroy } from "../agent/commands";
 import SessionSidebar from "./sessions/SessionSidebar";
 import ChatArea from "./sessions/ChatArea";
 import Composer from "./sessions/Composer";
@@ -49,17 +49,60 @@ export default function SessionsView() {
   }, [sessions, activeSessionId]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key !== "Escape") return;
     const tag = document.activeElement?.tagName;
-    if (tag === "TEXTAREA" || tag === "INPUT") return;
+    const isTyping = tag === "TEXTAREA" || tag === "INPUT";
+    const mod = e.metaKey || e.ctrlKey;
 
-    const { activeSessionId: sid, sessions: sess } = useBridgeStore.getState();
-    if (!sid) return;
-    const session = sess.get(sid);
-    if (session?.state !== "streaming") return;
+    if (e.key === "Escape" && !isTyping) {
+      const { activeSessionId: sid, sessions: sess } = useBridgeStore.getState();
+      if (!sid) return;
+      const session = sess.get(sid);
+      if (session?.state !== "streaming") return;
+      e.preventDefault();
+      sendCommand(sid, { type: "abort" });
+      return;
+    }
 
-    e.preventDefault();
-    sendCommand(sid, { type: "abort" });
+    if (mod && e.key === "n") {
+      e.preventDefault();
+      const store = useBridgeStore.getState();
+      const all = store.spec?.projects ?? [];
+      const focused = all.filter((p) => store.focusedPaths.has(p.path));
+      if (focused.length === 0) return;
+      const project = focused[0];
+      if (!store.expandedProjects.has(project.id)) {
+        store.toggleProjectExpanded(project.id);
+      }
+      sendSessionCreate(project.path, project.id);
+      return;
+    }
+
+    if (mod && e.key === "[") {
+      e.preventDefault();
+      const adjId = useBridgeStore.getState().getAdjacentSessionId("prev");
+      if (adjId) useBridgeStore.getState().setActiveSessionId(adjId);
+      return;
+    }
+
+    if (mod && e.key === "]") {
+      e.preventDefault();
+      const adjId = useBridgeStore.getState().getAdjacentSessionId("next");
+      if (adjId) useBridgeStore.getState().setActiveSessionId(adjId);
+      return;
+    }
+
+    if (mod && e.key === "w") {
+      e.preventDefault();
+      const sid = useBridgeStore.getState().activeSessionId;
+      if (sid) sendSessionDestroy(sid);
+      return;
+    }
+
+    if (e.key === "/" && !isTyping && !mod) {
+      e.preventDefault();
+      document.getElementById("composer-textarea")?.focus();
+      return;
+    }
   }, []);
 
   useEffect(() => {
