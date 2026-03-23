@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useBridgeStore } from "../../store";
 import { sendExtensionUIResponse } from "../../agent/commands";
 import type { ExtensionUIRequest } from "../../agent/types";
+import { colors, spacing, font, radius } from "../../ui/tokens";
 
 export default function ExtensionDialog() {
   const pending = useBridgeStore((s) => s.extensionUIRequest);
@@ -101,8 +102,8 @@ function renderContent(
         <>
           <div style={{
             ...styles.message,
-            color: request.notifyType === "error" ? "#f85149" :
-                   request.notifyType === "warning" ? "#d29922" : "#c9d1d9",
+            color: request.notifyType === "error" ? colors.error :
+                   request.notifyType === "warning" ? colors.warning : colors.text,
           }}>
             {request.message}
           </div>
@@ -128,78 +129,78 @@ const styles = {
   dialog: {
     width: 400,
     maxHeight: "60vh",
-    background: "#161b22",
-    border: "1px solid #30363d",
-    borderRadius: 12,
-    padding: 16,
+    background: colors.bgRaised,
+    border: `1px solid ${colors.border}`,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
     display: "flex",
     flexDirection: "column" as const,
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
+    fontFamily: font.sans,
   },
   title: {
-    fontSize: 16,
+    fontSize: font.sizeTitle,
     fontWeight: 600,
-    color: "#c9d1d9",
-    marginBottom: 12,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   message: {
-    fontSize: 14,
-    color: "#c9d1d9",
+    fontSize: font.sizeXl,
+    color: colors.text,
     lineHeight: 1.5,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   list: {
     overflowY: "auto" as const,
     maxHeight: 300,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   option: {
     display: "block",
     width: "100%",
-    padding: "8px 12px",
+    padding: `${spacing.sm}px ${spacing.md}px`,
     border: "none",
-    borderRadius: 6,
+    borderRadius: radius.md,
     background: "transparent",
-    color: "#c9d1d9",
+    color: colors.text,
     textAlign: "left" as const,
     cursor: "pointer",
-    fontSize: 13,
+    fontSize: font.sizeLg,
     fontFamily: "inherit",
     marginBottom: 2,
   },
   input: {
-    padding: "8px 12px",
-    border: "1px solid #30363d",
-    borderRadius: 6,
-    background: "#0d1117",
-    color: "#c9d1d9",
-    fontSize: 14,
+    padding: `${spacing.sm}px ${spacing.md}px`,
+    border: `1px solid ${colors.border}`,
+    borderRadius: radius.md,
+    background: colors.bg,
+    color: colors.text,
+    fontSize: font.sizeXl,
     fontFamily: "inherit",
     outline: "none",
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   buttons: {
     display: "flex",
-    gap: 8,
+    gap: spacing.sm,
     justifyContent: "flex-end",
   },
   cancel: {
-    padding: "8px 16px",
-    border: "1px solid #30363d",
-    borderRadius: 6,
+    padding: `${spacing.sm}px ${spacing.lg}px`,
+    border: `1px solid ${colors.border}`,
+    borderRadius: radius.md,
     background: "transparent",
-    color: "#8b949e",
-    fontSize: 13,
+    color: colors.textMuted,
+    fontSize: font.sizeLg,
     cursor: "pointer",
     fontFamily: "inherit",
   },
   confirmBtn: {
-    padding: "8px 16px",
+    padding: `${spacing.sm}px ${spacing.lg}px`,
     border: "none",
-    borderRadius: 6,
-    background: "#1f6feb",
+    borderRadius: radius.md,
+    background: colors.accent,
     color: "#fff",
-    fontSize: 13,
+    fontSize: font.sizeLg,
     cursor: "pointer",
     fontFamily: "inherit",
   },

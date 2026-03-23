@@ -1,6 +1,7 @@
 import Markdown from "react-markdown";
 import type { ChatMessage } from "../../store";
 import ToolCallBlock from "./ToolCallBlock";
+import { colors, spacing, font, radius } from "../../ui/tokens";
 
 interface Props {
   message: ChatMessage;
@@ -43,36 +44,36 @@ const styles = {
   userRow: {
     display: "flex",
     justifyContent: "flex-end",
-    padding: "4px 16px",
+    padding: `${spacing.xs}px ${spacing.lg}px`,
   },
   userBubble: {
     maxWidth: "70%",
-    padding: "8px 12px",
-    borderRadius: 12,
-    background: "#1f6feb",
+    padding: `${spacing.sm}px ${spacing.md}px`,
+    borderRadius: radius.xl,
+    background: colors.userBubble,
     color: "#fff",
-    fontSize: 14,
+    fontSize: font.sizeXl,
     lineHeight: 1.5,
     whiteSpace: "pre-wrap" as const,
   },
   assistantRow: {
-    padding: "4px 16px",
+    padding: `${spacing.xs}px ${spacing.lg}px`,
   },
   assistantBubble: {
     maxWidth: "85%",
-    color: "#c9d1d9",
-    fontSize: 14,
+    color: colors.text,
+    fontSize: font.sizeXl,
     lineHeight: 1.6,
   },
   markdown: {
     overflowWrap: "break-word" as const,
   },
   thinking: {
-    color: "#8b949e",
+    color: colors.textMuted,
     fontStyle: "italic" as const,
   },
   cursor: {
-    color: "#58a6ff",
+    color: colors.streaming,
     animation: "blink 1s step-end infinite",
   },
 };

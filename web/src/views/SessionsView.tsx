@@ -6,6 +6,7 @@ import ChatArea from "./sessions/ChatArea";
 import Composer from "./sessions/Composer";
 import ExtensionDialog from "./sessions/ExtensionDialog";
 import ErrorBoundary from "../ui/ErrorBoundary";
+import { colors, font, spacing } from "../ui/tokens";
 
 function EmptyState() {
   return (
@@ -83,8 +84,8 @@ const styles = {
   container: {
     display: "flex",
     height: "100%",
-    background: "#0d1117",
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
+    background: colors.bg,
+    fontFamily: font.sans,
   },
   main: {
     flex: 1,
@@ -104,18 +105,18 @@ const styles = {
   },
   emptyIcon: {
     fontSize: 32,
-    color: "#30363d",
-    marginBottom: 12,
+    color: colors.border,
+    marginBottom: spacing.md,
   },
   emptyTitle: {
     fontSize: 15,
     fontWeight: 600,
-    color: "#8b949e",
-    margin: "0 0 8px",
+    color: colors.textMuted,
+    margin: `0 0 ${spacing.sm}px`,
   },
   emptyHint: {
-    fontSize: 13,
-    color: "#484f58",
+    fontSize: font.sizeLg,
+    color: colors.textFaint,
     lineHeight: 1.5,
     margin: 0,
   },

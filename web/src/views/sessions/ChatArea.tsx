@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { useBridgeStore } from "../../store";
 import type { SessionInfo } from "../../agent/ws-types";
 import MessageBubble from "./MessageBubble";
+import { colors, spacing, font } from "../../ui/tokens";
 
 interface Props {
   session: SessionInfo;
@@ -30,7 +31,7 @@ export default function ChatArea({ session }: Props) {
         <span style={styles.model}>{session.model}</span>
         <span style={{
           ...styles.badge,
-          color: session.state === "streaming" ? "#58a6ff" : "#8b949e",
+          color: session.state === "streaming" ? colors.streaming : colors.textMuted,
         }}>
           {session.state}
         </span>
@@ -56,15 +57,15 @@ const styles = {
   header: {
     display: "flex",
     alignItems: "center",
-    gap: 8,
-    padding: "8px 16px",
-    borderBottom: "1px solid #30363d",
-    fontSize: 12,
-    color: "#8b949e",
+    gap: spacing.sm,
+    padding: `${spacing.sm}px ${spacing.lg}px`,
+    borderBottom: `1px solid ${colors.border}`,
+    fontSize: font.sizeMd,
+    color: colors.textMuted,
     flexShrink: 0,
   },
   model: {
-    fontFamily: "'SF Mono', 'Fira Code', monospace",
+    fontFamily: font.mono,
   },
   badge: {
     fontWeight: 500,
@@ -72,14 +73,14 @@ const styles = {
   messages: {
     flex: 1,
     overflowY: "auto" as const,
-    padding: "12px 0",
+    padding: `${spacing.md}px 0`,
   },
   empty: {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     height: "100%",
-    color: "#8b949e",
-    fontSize: 14,
+    color: colors.textMuted,
+    fontSize: font.sizeXl,
   },
 };

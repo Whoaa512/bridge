@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ToolCallInfo } from "../../store";
+import { colors, spacing, font, radius } from "../../ui/tokens";
 
 interface Props {
   tool: ToolCallInfo;
@@ -35,9 +36,9 @@ export default function ToolCallBlock({ tool }: Props) {
 
 const styles = {
   container: {
-    margin: "4px 0",
-    border: "1px solid #30363d",
-    borderRadius: 6,
+    margin: `${spacing.xs}px 0`,
+    border: `1px solid ${colors.border}`,
+    borderRadius: radius.md,
     overflow: "hidden",
   },
   header: {
@@ -45,53 +46,53 @@ const styles = {
     alignItems: "center",
     gap: 6,
     width: "100%",
-    padding: "6px 10px",
+    padding: `6px 10px`,
     border: "none",
-    background: "#161b22",
-    color: "#8b949e",
-    fontSize: 12,
+    background: colors.bgRaised,
+    color: colors.textMuted,
+    fontSize: font.sizeMd,
     cursor: "pointer",
     fontFamily: "inherit",
     textAlign: "left" as const,
   },
   chevron: {
-    fontSize: 10,
+    fontSize: font.sizeXs,
     width: 12,
     flexShrink: 0,
   },
   name: {
-    color: "#d2a8ff",
-    fontFamily: "'SF Mono', 'Fira Code', monospace",
+    color: colors.purple,
+    fontFamily: font.mono,
     flex: 1,
   },
   running: {
-    color: "#58a6ff",
+    color: colors.streaming,
     animation: "spin 1s linear infinite",
   },
   error: {
-    color: "#f85149",
+    color: colors.error,
   },
   success: {
-    color: "#3fb950",
+    color: colors.success,
   },
   body: {
-    padding: 8,
-    background: "#0d1117",
-    borderTop: "1px solid #30363d",
+    padding: spacing.sm,
+    background: colors.bg,
+    borderTop: `1px solid ${colors.border}`,
   },
   pre: {
     margin: 0,
-    padding: 8,
-    fontSize: 11,
+    padding: spacing.sm,
+    fontSize: font.sizeSm,
     lineHeight: 1.5,
-    fontFamily: "'SF Mono', 'Fira Code', monospace",
-    color: "#c9d1d9",
+    fontFamily: font.mono,
+    color: colors.text,
     whiteSpace: "pre-wrap" as const,
     wordBreak: "break-word" as const,
     maxHeight: 300,
     overflow: "auto",
   },
   errorText: {
-    color: "#f85149",
+    color: colors.error,
   },
 };

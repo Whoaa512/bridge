@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { useBridgeStore } from "../../store";
 import { sendCommand } from "../../agent/commands";
+import { colors, spacing, font, radius } from "../../ui/tokens";
 
 export default function Composer() {
   const [text, setText] = useState("");
@@ -105,30 +106,30 @@ export default function Composer() {
 
 const styles = {
   container: {
-    padding: "8px 16px 12px",
-    borderTop: "1px solid #30363d",
+    padding: `${spacing.sm}px ${spacing.lg}px ${spacing.md}px`,
+    borderTop: `1px solid ${colors.border}`,
     flexShrink: 0,
   },
   hint: {
-    fontSize: 11,
-    color: "#8b949e",
-    marginBottom: 4,
+    fontSize: font.sizeSm,
+    color: colors.textMuted,
+    marginBottom: spacing.xs,
     textAlign: "center" as const,
   },
   row: {
     display: "flex",
-    gap: 8,
+    gap: spacing.sm,
     alignItems: "flex-end",
   },
   textarea: {
     flex: 1,
     resize: "none" as const,
-    padding: "8px 12px",
-    border: "1px solid #30363d",
-    borderRadius: 8,
-    background: "#161b22",
-    color: "#c9d1d9",
-    fontSize: 14,
+    padding: `${spacing.sm}px ${spacing.md}px`,
+    border: `1px solid ${colors.border}`,
+    borderRadius: radius.lg,
+    background: colors.bgRaised,
+    color: colors.text,
+    fontSize: font.sizeXl,
     fontFamily: "inherit",
     lineHeight: 1.5,
     outline: "none",
@@ -139,8 +140,8 @@ const styles = {
     width: 36,
     height: 36,
     border: "none",
-    borderRadius: 8,
-    background: "#1f6feb",
+    borderRadius: radius.lg,
+    background: colors.accent,
     color: "#fff",
     fontSize: 18,
     cursor: "pointer",
@@ -152,11 +153,11 @@ const styles = {
   abortBtn: {
     width: 36,
     height: 36,
-    border: "1px solid #f85149",
-    borderRadius: 8,
+    border: `1px solid ${colors.error}`,
+    borderRadius: radius.lg,
     background: "transparent",
-    color: "#f85149",
-    fontSize: 14,
+    color: colors.error,
+    fontSize: font.sizeXl,
     cursor: "pointer",
     display: "flex",
     alignItems: "center",
