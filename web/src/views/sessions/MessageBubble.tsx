@@ -1,6 +1,7 @@
 import Markdown from "react-markdown";
 import type { ChatMessage } from "../../store";
-import ToolCallBlock from "./ToolCallBlock";
+import { deriveWorkLog } from "./work-log";
+import WorkLogBlock from "./WorkLogBlock";
 import { colors, spacing, font, radius } from "../../ui/tokens";
 
 interface Props {
@@ -26,9 +27,9 @@ export default function MessageBubble({ message }: Props) {
             <Markdown>{message.content}</Markdown>
           </div>
         )}
-        {message.toolCalls?.map((tc) => (
-          <ToolCallBlock key={tc.id} tool={tc} />
-        ))}
+        {message.toolCalls && message.toolCalls.length > 0 && (
+          <WorkLogBlock groups={deriveWorkLog(message.toolCalls)} />
+        )}
         {message.isStreaming && !message.content && !message.toolCalls?.length && (
           <span style={styles.thinking}>Thinking…</span>
         )}
