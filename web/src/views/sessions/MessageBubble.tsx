@@ -3,6 +3,7 @@ import type { ChatMessage } from "../../store";
 import { deriveWorkLog } from "./work-log";
 import WorkLogBlock from "./WorkLogBlock";
 import { formatDuration } from "./format-duration";
+import { MarkdownCode } from "./MarkdownCode";
 import { colors, spacing, font, radius } from "../../ui/tokens";
 
 interface Props {
@@ -29,7 +30,7 @@ export default function MessageBubble({ message }: Props) {
       <div style={styles.assistantBubble}>
         {message.content && (
           <div className="bridge-markdown" style={styles.markdown}>
-            <Markdown>{message.content}</Markdown>
+            <Markdown components={{ code: MarkdownCode }}>{message.content}</Markdown>
           </div>
         )}
         {message.toolCalls && message.toolCalls.length > 0 && (
