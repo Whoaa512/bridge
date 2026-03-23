@@ -19,6 +19,9 @@ if (!canvas) throw new Error("Canvas element not found");
 
 const handle = initCanvas(canvas);
 
+const initialView = useBridgeStore.getState().activeView;
+handle.setVisible(CANVAS_VIEWS.has(initialView));
+
 const FILTER_BY_VIEW: Record<View, FilterMode> = {
   complexity: "default",
   workspace: "default",
