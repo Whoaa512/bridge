@@ -28,6 +28,11 @@ export default function SessionsView() {
   const sessions = useBridgeStore((s) => s.sessions);
 
   const activeSession = activeSessionId ? sessions.get(activeSessionId) : null;
+  const spec = useBridgeStore((s) => s.spec);
+
+  const projectName = activeSession?.projectId && spec
+    ? spec.projects.find((p) => p.path === activeSession.projectId)?.name
+    : undefined;
 
   useEffect(() => {
     if (!activeSessionId) return;
@@ -70,7 +75,7 @@ export default function SessionsView() {
           <EmptyState />
         ) : (
           <ErrorBoundary>
-            <ChatArea session={activeSession} />
+            <ChatArea session={activeSession} projectName={projectName} />
             <Composer />
           </ErrorBoundary>
         )}

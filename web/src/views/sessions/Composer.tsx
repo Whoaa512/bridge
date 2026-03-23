@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useBridgeStore } from "../../store";
 import { sendCommand } from "../../agent/commands";
 import { colors, spacing, font, radius } from "../../ui/tokens";
@@ -11,6 +11,10 @@ export default function Composer() {
 
   const session = activeSessionId ? sessions.get(activeSessionId) : null;
   const isStreaming = session?.state === "streaming";
+
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, [activeSessionId]);
 
   const send = useCallback((mode: "prompt" | "follow_up" | "steer") => {
     const trimmed = text.trim();
@@ -66,7 +70,7 @@ export default function Composer() {
     setText(e.target.value);
     const ta = e.target;
     ta.style.height = "auto";
-    ta.style.height = Math.min(ta.scrollHeight, 200) + "px";
+    ta.style.height = Math.min(ta.scrollHeight, 300) + "px";
   }, []);
 
   return (
@@ -82,9 +86,12 @@ export default function Composer() {
           value={text}
           onChange={handleInput}
           onKeyDown={handleKeyDown}
-          placeholder={isStreaming ? "Follow up or steer…" : "Send a message…"}
+          placeholder={isStreaming ? "Follow up or steer…" : session?.model ? `Message ${session.model}…` : "Send a message…"}
           rows={1}
-          style={styles.textarea}
+          style={{
+            ...styles.textarea,
+            ...(isStreaming ? { borderLeft: `2px solid ${colors.accent}` } : {}),
+          }}
         />
         {isStreaming ? (
           <button onClick={abort} style={styles.abortBtn}>
@@ -134,7 +141,7 @@ const styles = {
     lineHeight: 1.5,
     outline: "none",
     minHeight: 38,
-    maxHeight: 200,
+    maxHeight: 300,
   },
   sendBtn: {
     width: 36,

@@ -2,15 +2,20 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { useBridgeStore } from "../../store";
 import type { SessionInfo } from "../../agent/ws-types";
 import MessageBubble from "./MessageBubble";
+import ErrorBanner from "./ErrorBanner";
 import { formatDuration } from "./format-duration";
 import { colors, spacing, font, radius } from "../../ui/tokens";
 
 interface Props {
   session: SessionInfo;
+  projectName?: string;
 }
 
-export default function ChatArea({ session }: Props) {
+const pulseAnimation = "bridge-pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.3 } }";
+
+export default function ChatArea({ session, projectName }: Props) {
   const messages = useBridgeStore((s) => s.messages.get(session.id) ?? []);
+  const sessionError = useBridgeStore((s) => s.sessionErrors.get(session.id));
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [hasNewBelow, setHasNewBelow] = useState(false);
@@ -48,17 +53,37 @@ export default function ChatArea({ session }: Props) {
     setHasNewBelow(false);
   }, []);
 
+  const isPulsing = session.state === "streaming" || session.state === "compacting";
+  const dotColor = session.state === "streaming" ? colors.streaming
+    : session.state === "compacting" ? colors.warning
+    : colors.textMuted;
+  const stateLabel = session.state === "streaming" ? "Working…"
+    : session.state === "compacting" ? "Compacting…"
+    : null;
+
   return (
     <div style={styles.container}>
+      {isPulsing && (
+        <style>{`@keyframes ${pulseAnimation}`}</style>
+      )}
       <div style={styles.header}>
+        {projectName && <span style={styles.projectName}>{projectName}</span>}
         <span style={styles.model}>{session.model}</span>
-        <span style={{
-          ...styles.badge,
-          color: session.state === "streaming" ? colors.streaming : colors.textMuted,
-        }}>
-          {session.state}
+        <span style={styles.statusGroup}>
+          <span style={{
+            ...styles.dot,
+            background: dotColor,
+            ...(isPulsing ? { animation: "bridge-pulse 1.5s ease-in-out infinite" } : {}),
+          }} />
+          {stateLabel && <span style={{ color: dotColor, fontWeight: 500 }}>{stateLabel}</span>}
         </span>
       </div>
+      {sessionError && (
+        <ErrorBanner
+          message={sessionError}
+          onDismiss={() => useBridgeStore.getState().setSessionError(session.id, null)}
+        />
+      )}
       <div style={styles.messagesWrapper}>
         <div ref={scrollRef} style={styles.messages} onScroll={handleScroll}>
           {messages.length === 0 ? (
@@ -117,8 +142,21 @@ const styles = {
   model: {
     fontFamily: font.mono,
   },
-  badge: {
-    fontWeight: 500,
+  projectName: {
+    fontWeight: 600,
+    color: colors.text,
+  },
+  statusGroup: {
+    display: "flex",
+    alignItems: "center",
+    gap: spacing.xs,
+    marginLeft: "auto",
+  },
+  dot: {
+    width: 7,
+    height: 7,
+    borderRadius: "50%",
+    flexShrink: 0,
   },
   messagesWrapper: {
     position: "relative" as const,

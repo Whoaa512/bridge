@@ -88,6 +88,10 @@ function handlePiEventInner(sessionId: string, event: AgentEvent) {
   const newState = sessionStateFromEvent(event);
   if (newState) store.updateSessionState(sessionId, newState);
 
+  if (event.type === "agent_start") {
+    store.setSessionError(sessionId, null);
+  }
+
   switch (event.type) {
     case "agent_start":
       store.addMessage(sessionId, {
@@ -170,6 +174,7 @@ const ws = connectWS({
   },
   onSessionError: (sessionId, error) => {
     console.warn(`session ${sessionId} error: ${error}`);
+    useBridgeStore.getState().setSessionError(sessionId, error);
   },
   onSessionsList: (sessions) => {
     useBridgeStore.getState().setSessions(sessions);

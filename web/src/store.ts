@@ -68,6 +68,9 @@ export interface BridgeStore {
 
   sessionHistory: Map<string, HistoricalSession[]>;
   setSessionHistory: (path: string, sessions: HistoricalSession[]) => void;
+
+  sessionErrors: Map<string, string>;
+  setSessionError: (sessionId: string, error: string | null) => void;
 }
 
 export const useBridgeStore = create<BridgeStore>((set, get) => ({
@@ -208,5 +211,16 @@ export const useBridgeStore = create<BridgeStore>((set, get) => ({
     const next = new Map(get().sessionHistory);
     next.set(path, sessions);
     set({ sessionHistory: next });
+  },
+
+  sessionErrors: new Map(),
+  setSessionError: (sessionId, error) => {
+    const next = new Map(get().sessionErrors);
+    if (error === null) {
+      next.delete(sessionId);
+    } else {
+      next.set(sessionId, error);
+    }
+    set({ sessionErrors: next });
   },
 }));
