@@ -12,10 +12,12 @@ interface Props {
 }
 
 const pulseAnimation = "bridge-pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.3 } }";
+const progressAnimation = "bridge-progress { 0% { transform: translateX(-100%) } 100% { transform: translateX(100%) } }";
 
 export default function ChatArea({ session, projectName }: Props) {
   const messages = useBridgeStore((s) => s.messages.get(session.id) ?? []);
   const sessionError = useBridgeStore((s) => s.sessionErrors.get(session.id));
+  const topic = useBridgeStore((s) => s.sessionTopics.get(session.id));
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [hasNewBelow, setHasNewBelow] = useState(false);
@@ -53,22 +55,37 @@ export default function ChatArea({ session, projectName }: Props) {
     setHasNewBelow(false);
   }, []);
 
-  const isPulsing = session.state === "streaming" || session.state === "compacting";
-  const dotColor = session.state === "streaming" ? colors.streaming
+  const isStreaming = session.state === "streaming";
+  const isPulsing = isStreaming || session.state === "compacting";
+  const dotColor = isStreaming ? colors.streaming
     : session.state === "compacting" ? colors.warning
     : colors.textMuted;
-  const stateLabel = session.state === "streaming" ? "Working…"
+  const stateLabel = isStreaming ? "Working…"
     : session.state === "compacting" ? "Compacting…"
     : null;
+
+  const headerTitle = topic
+    ? (projectName ? `${projectName} / ${topic}` : topic)
+    : projectName || null;
 
   return (
     <div style={styles.container}>
       {isPulsing && (
         <style>{`@keyframes ${pulseAnimation}`}</style>
       )}
+      {isStreaming && (
+        <>
+          <style>{`@keyframes ${progressAnimation}`}</style>
+          <div style={styles.progressTrack}>
+            <div style={styles.progressBar} />
+          </div>
+        </>
+      )}
       <div style={styles.header}>
-        {projectName && <span style={styles.projectName}>{projectName}</span>}
-        <span style={styles.model}>{session.model}</span>
+        <div style={styles.headerText}>
+          {headerTitle && <span style={styles.headerTitle}>{headerTitle}</span>}
+          <span style={topic ? styles.modelSecondary : styles.model}>{session.model}</span>
+        </div>
         <span style={styles.statusGroup}>
           <span style={{
             ...styles.dot,
@@ -129,6 +146,17 @@ const styles = {
     flex: 1,
     minHeight: 0,
   },
+  progressTrack: {
+    height: 2,
+    overflow: "hidden" as const,
+    flexShrink: 0,
+  },
+  progressBar: {
+    width: "100%",
+    height: "100%",
+    background: colors.accent,
+    animation: "bridge-progress 1.5s ease-in-out infinite",
+  },
   header: {
     display: "flex",
     alignItems: "center",
@@ -139,18 +167,35 @@ const styles = {
     color: colors.textMuted,
     flexShrink: 0,
   },
+  headerText: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: 2,
+    minWidth: 0,
+    overflow: "hidden" as const,
+  },
+  headerTitle: {
+    fontSize: font.sizeXl,
+    color: colors.text,
+    fontWeight: 500,
+    whiteSpace: "nowrap" as const,
+    overflow: "hidden" as const,
+    textOverflow: "ellipsis" as const,
+  },
   model: {
     fontFamily: font.mono,
   },
-  projectName: {
-    fontWeight: 600,
-    color: colors.text,
+  modelSecondary: {
+    fontFamily: font.mono,
+    fontSize: font.sizeSm,
+    color: colors.textMuted,
   },
   statusGroup: {
     display: "flex",
     alignItems: "center",
     gap: spacing.xs,
     marginLeft: "auto",
+    flexShrink: 0,
   },
   dot: {
     width: 7,

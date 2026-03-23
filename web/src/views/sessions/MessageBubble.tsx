@@ -1,3 +1,4 @@
+import { useState } from "react";
 import Markdown from "react-markdown";
 import type { ChatMessage } from "../../store";
 import { deriveWorkLog } from "./work-log";
@@ -10,7 +11,44 @@ interface Props {
   message: ChatMessage;
 }
 
+function ThinkingDots() {
+  return (
+    <span style={styles.dotsContainer}>
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          style={{
+            ...styles.dot,
+            animationDelay: `${i * 0.3}s`,
+          }}
+        >
+          ·
+        </span>
+      ))}
+      <style>{`@keyframes bridge-dot-pulse { 0%,100% { opacity: 0.2 } 50% { opacity: 1 } }`}</style>
+    </span>
+  );
+}
+
+function CopyButton({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <button style={styles.copyButton} onClick={handleCopy}>
+      {copied ? "✓" : "Copy"}
+    </button>
+  );
+}
+
 export default function MessageBubble({ message }: Props) {
+  const [hovered, setHovered] = useState(false);
+
   if (message.role === "user") {
     return (
       <div style={styles.userRow}>
@@ -27,7 +65,14 @@ export default function MessageBubble({ message }: Props) {
 
   return (
     <div style={styles.assistantRow}>
-      <div style={styles.assistantBubble}>
+      <div
+        style={styles.assistantBubble}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        {hovered && message.content && !message.isStreaming && (
+          <CopyButton content={message.content} />
+        )}
         {message.content && (
           <div className="bridge-markdown" style={styles.markdown}>
             <Markdown components={{ code: MarkdownCode }}>{message.content}</Markdown>
@@ -37,7 +82,7 @@ export default function MessageBubble({ message }: Props) {
           <WorkLogBlock groups={deriveWorkLog(message.toolCalls)} />
         )}
         {message.isStreaming && !message.content && !message.toolCalls?.length && (
-          <span style={styles.thinking}>Thinking…</span>
+          <ThinkingDots />
         )}
         {message.isStreaming && message.content && (
           <span style={styles.cursor}>▊</span>
@@ -70,6 +115,7 @@ const styles = {
     padding: `${spacing.xs}px ${spacing.lg}px`,
   },
   assistantBubble: {
+    position: "relative" as const,
     maxWidth: "85%",
     color: colors.text,
     fontSize: font.sizeXl,
@@ -78,9 +124,27 @@ const styles = {
   markdown: {
     overflowWrap: "break-word" as const,
   },
-  thinking: {
+  dotsContainer: {
+    display: "inline-flex",
+    gap: spacing.xs,
     color: colors.textMuted,
-    fontStyle: "italic" as const,
+    fontSize: font.sizeLg,
+  },
+  dot: {
+    animation: "bridge-dot-pulse 1.2s ease-in-out infinite",
+  },
+  copyButton: {
+    position: "absolute" as const,
+    top: 0,
+    right: 0,
+    background: colors.bgOverlay,
+    color: colors.textMuted,
+    border: "none",
+    borderRadius: radius.sm,
+    fontSize: font.sizeXs,
+    padding: `2px ${spacing.xs}px`,
+    cursor: "pointer",
+    zIndex: 1,
   },
   cursor: {
     color: colors.streaming,
