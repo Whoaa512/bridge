@@ -20,6 +20,8 @@ export interface ChatMessage {
   timestamp: number;
   toolCalls?: ToolCallInfo[];
   isStreaming?: boolean;
+  startedAt?: number;
+  completedAt?: number;
 }
 
 export interface BridgeStore {

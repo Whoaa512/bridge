@@ -2,6 +2,7 @@ import Markdown from "react-markdown";
 import type { ChatMessage } from "../../store";
 import { deriveWorkLog } from "./work-log";
 import WorkLogBlock from "./WorkLogBlock";
+import { formatDuration } from "./format-duration";
 import { colors, spacing, font, radius } from "../../ui/tokens";
 
 interface Props {
@@ -19,6 +20,10 @@ export default function MessageBubble({ message }: Props) {
     );
   }
 
+  const duration = message.completedAt && message.startedAt
+    ? message.completedAt - message.startedAt
+    : null;
+
   return (
     <div style={styles.assistantRow}>
       <div style={styles.assistantBubble}>
@@ -35,6 +40,9 @@ export default function MessageBubble({ message }: Props) {
         )}
         {message.isStreaming && message.content && (
           <span style={styles.cursor}>▊</span>
+        )}
+        {!message.isStreaming && duration !== null && (
+          <div style={styles.duration}>{formatDuration(duration)}</div>
         )}
       </div>
     </div>
@@ -76,5 +84,11 @@ const styles = {
   cursor: {
     color: colors.streaming,
     animation: "blink 1s step-end infinite",
+  },
+  duration: {
+    textAlign: "right" as const,
+    fontSize: font.sizeSm,
+    color: colors.textFaint,
+    marginTop: spacing.xs,
   },
 };

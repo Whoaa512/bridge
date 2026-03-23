@@ -2,7 +2,8 @@ import { useEffect, useRef, useCallback } from "react";
 import { useBridgeStore } from "../../store";
 import type { SessionInfo } from "../../agent/ws-types";
 import MessageBubble from "./MessageBubble";
-import { colors, spacing, font } from "../../ui/tokens";
+import { formatDuration } from "./format-duration";
+import { colors, spacing, font, radius } from "../../ui/tokens";
 
 interface Props {
   session: SessionInfo;
@@ -40,7 +41,27 @@ export default function ChatArea({ session }: Props) {
         {messages.length === 0 ? (
           <div style={styles.empty}>Send a message to start.</div>
         ) : (
-          messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)
+          messages.map((msg, i) => {
+            const prev = i > 0 ? messages[i - 1] : null;
+            const showDivider = prev
+              && prev.role === "assistant"
+              && prev.completedAt
+              && msg.role === "user";
+            const elapsed = showDivider
+              ? msg.timestamp - prev!.completedAt!
+              : 0;
+            return (
+              <div key={msg.id}>
+                {showDivider && (
+                  <div style={styles.divider}>
+                    <div style={styles.dividerLine} />
+                    <span style={styles.dividerBadge}>{formatDuration(elapsed)}</span>
+                  </div>
+                )}
+                <MessageBubble message={msg} />
+              </div>
+            );
+          })
         )}
       </div>
     </div>
@@ -82,5 +103,28 @@ const styles = {
     height: "100%",
     color: colors.textMuted,
     fontSize: font.sizeXl,
+  },
+  divider: {
+    position: "relative" as const,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    margin: `${spacing.md}px ${spacing.lg}px`,
+  },
+  dividerLine: {
+    position: "absolute" as const,
+    top: "50%",
+    left: 0,
+    right: 0,
+    height: 1,
+    background: colors.border,
+  },
+  dividerBadge: {
+    position: "relative" as const,
+    padding: `2px ${spacing.sm}px`,
+    fontSize: font.sizeXs,
+    color: colors.textFaint,
+    background: colors.bgRaised,
+    borderRadius: radius.sm,
   },
 };

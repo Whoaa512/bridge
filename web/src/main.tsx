@@ -97,11 +97,12 @@ function handlePiEventInner(sessionId: string, event: AgentEvent) {
         timestamp: Date.now(),
         toolCalls: [],
         isStreaming: true,
+        startedAt: Date.now(),
       });
       break;
 
     case "agent_end":
-      store.updateLastMessage(sessionId, (msg) => ({ ...msg, isStreaming: false }));
+      store.updateLastMessage(sessionId, (msg) => ({ ...msg, isStreaming: false, completedAt: Date.now() }));
       break;
 
     case "message_update": {
